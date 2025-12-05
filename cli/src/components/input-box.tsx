@@ -4,7 +4,21 @@ import { MultilineInput, type MultilineInputHandle } from './multiline-input'
 import { Cursor } from './cursor'
 import { useTheme } from '../hooks/use-theme'
 import type { InputValue } from '../state/chat-store'
-import type { KeyEvent } from '@opentui/core'
+import type { KeyEvent, BorderCharacters } from '@opentui/core'
+
+const BORDER_CHARS: BorderCharacters = {
+  topLeft: '╭',
+  topRight: '╮',
+  bottomLeft: '╰',
+  bottomRight: '╯',
+  horizontal: '─',
+  vertical: '│',
+  topT: '┬',
+  bottomT: '┴',
+  leftT: '├',
+  rightT: '┤',
+  cross: '┼',
+}
 
 interface InputBoxProps {
   inputValue: string
@@ -50,22 +64,26 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
     // Calculate widths
     const innerWidth = width - 2 // minus left and right border chars
 
-    // Bottom border: ╰─── Sonder ─── stealth ─── ? for shortcuts ───╯
+    // Bottom status bar content
     const hintText = hintOverride ?? '? for shortcuts'
     const sep = ' ─── '
-    const bottomContent = `─── ${model}${sep}${mode}${sep}${hintText} `
-    const dashesAfter = Math.max(0, innerWidth - bottomContent.length)
+    const statusContent = `─── ${model}${sep}${mode}${sep}${hintText} `
+    const dashesAfter = Math.max(0, innerWidth - statusContent.length)
 
     return (
       <box style={{ flexDirection: 'column', width }}>
-        {/* TOP BORDER - using box like welcome banner */}
-        <box style={{ flexDirection: 'row' }}>
-          <text style={{ fg: theme.borderColor }}>{'╭' + '─'.repeat(innerWidth) + '╮'}</text>
-        </box>
-
-        {/* MIDDLE ROW */}
-        <box style={{ flexDirection: 'row' }}>
-          <text style={{ fg: theme.borderColor }}>{'│ '}</text>
+        {/* Main input box with native borders */}
+        <box
+          style={{
+            borderStyle: 'single',
+            borderColor: theme.borderColor,
+            customBorderChars: BORDER_CHARS,
+            paddingLeft: 1,
+            paddingRight: 1,
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+          }}
+        >
           <text style={{ fg: '#888888' }}>{'> '}</text>
           {inputValue.length === 0 && <Cursor visible={focused} />}
           <box style={{ flexGrow: 1 }}>
@@ -84,10 +102,9 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
               hideCursor={inputValue.length === 0}
             />
           </box>
-          <text style={{ fg: theme.borderColor }}>{'│'}</text>
         </box>
 
-        {/* BOTTOM BORDER */}
+        {/* Status bar overlaying the bottom border */}
         <box style={{ flexDirection: 'row', marginTop: -1 }}>
           <text style={{ fg: theme.borderColor }}>{'╰─── '}</text>
           <text style={{ fg: theme.muted }}>{model}</text>

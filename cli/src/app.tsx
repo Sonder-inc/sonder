@@ -536,7 +536,7 @@ export const App = ({ initialPrompt }: AppProps) => {
         style={{
           width: sidebarWidth,
           borderStyle: 'single',
-          borderColor: theme.borderMuted,
+          borderColor: theme.borderColor,
           marginRight: 1,
           marginTop: 1,
           marginBottom: 1,

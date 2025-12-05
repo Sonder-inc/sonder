@@ -31,7 +31,7 @@ export const WelcomeBanner = ({
 
   // Title positioned on top border (left offset)
   const versionText = ` Sonder v${version} `
-  const dashesBeforeTitle = 3
+  const dashesBeforeTitle = 1
   const dashesAfterTitle = innerWidth - dashesBeforeTitle - versionText.length
 
   // Helper to center text in left panel
@@ -60,12 +60,12 @@ export const WelcomeBanner = ({
   const rows = [
     buildRow('', ''),                                    // empty top padding
     buildRow('Welcome back', 'Tips'),                    // greeting / tips header
-    buildRow('', 'Press ? for shortcuts'),               // empty / tip text
+    buildRow('', '/school to rank up'),                   // empty / tip text
     buildRow(SONDER_LOGO[0], '─'.repeat(rightPanelWidth - 2)), // logo line 1 / divider
     buildRow(SONDER_LOGO[1], 'Recent activity'),         // logo line 2 / activity header
     buildRow(SONDER_LOGO[2], 'No recent sessions'),      // logo line 3 / activity text
     buildRow('', ''),                                    // spacer
-    buildRow(modelInfo, ''),                             // model info
+    buildRow(' ' + modelInfo, ''),                        // model info
     buildRow(machineInfo, ''),                           // machine info
     buildRow('', ''),                                    // bottom padding
   ]
