@@ -167,6 +167,12 @@ export function useAppKeyboard({
   useKeyboard(
     useCallback(
       (key: KeyEvent) => {
+        // Escape: cancel streaming if active
+        if (key.name === 'escape' && isStreaming) {
+          cancelStream()
+          return
+        }
+
         // Ctrl+O: toggle expand last completed tool
         if (key.ctrl && key.name === 'o') {
           const completedTools = toolCalls.filter((t) => t.status === 'complete' && t.fullResult)
@@ -174,12 +180,6 @@ export function useAppKeyboard({
             const lastTool = completedTools[completedTools.length - 1]
             toggleExpandedTool(lastTool.id)
           }
-          return
-        }
-
-        // Escape: cancel streaming if active
-        if (key.name === 'escape' && isStreaming) {
-          cancelStream()
           return
         }
 

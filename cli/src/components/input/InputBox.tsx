@@ -1,10 +1,10 @@
 import { forwardRef, useRef } from 'react'
+import type { BorderCharacters } from '@opentui/core'
 
-import { MultilineInput, type MultilineInputHandle } from './multiline-input'
-import { Cursor } from './cursor'
-import { useTheme } from '../hooks/use-theme'
-import type { InputValue } from '../state/chat-store'
-import type { KeyEvent, BorderCharacters } from '@opentui/core'
+import { MultilineInput, type MultilineInputHandle } from './MultilineInput'
+import { Cursor } from '../cursor'
+import { useTheme } from '../../hooks/use-theme'
+import type { InputBoxProps } from './types'
 
 const BORDER_CHARS: BorderCharacters = {
   topLeft: '╭',
@@ -18,19 +18,6 @@ const BORDER_CHARS: BorderCharacters = {
   leftT: '├',
   rightT: '┤',
   cross: '┼',
-}
-
-interface InputBoxProps {
-  inputValue: string
-  cursorPosition: number
-  setInputValue: (value: InputValue | ((prev: InputValue) => InputValue)) => void
-  onSubmit: () => void
-  focused: boolean
-  width: number
-  model?: string
-  mode?: string
-  onKeyIntercept?: (key: KeyEvent) => boolean
-  hintOverride?: string
 }
 
 export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
@@ -47,7 +34,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
       onKeyIntercept,
       hintOverride,
     },
-    ref,
+    ref
   ) {
     const theme = useTheme()
     const inputRef = useRef<MultilineInputHandle | null>(null)
@@ -116,5 +103,5 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
         </box>
       </box>
     )
-  },
+  }
 )

@@ -1,6 +1,10 @@
-import { useCallback, useRef, useState } from 'react'
-import { streamChat, getFlavorWord, getSmartShortcut, type Message as APIMessage, type ToolCallRequest } from '../services/openrouter'
-import { executeTool, type ToolName } from '../tools'
+import { useCallback } from 'react'
+import { streamChat, type Message as APIMessage, type ToolCallRequest } from '../services/openrouter'
+import { useFlavorWord } from './use-flavor-word'
+import { useSmartShortcut } from './use-smart-shortcut'
+import { useStreaming } from './use-streaming'
+import { useToolExecutor } from './use-tool-executor'
+import { usePlanStore } from '../state/plan-store'
 import type { ChatMessage, ToolCall } from '../types/chat'
 
 interface UseChatHandlerOptions {
@@ -13,12 +17,20 @@ interface UseChatHandlerOptions {
   setStreamingMessageId: (id: string | null) => void
   addToolCall: (call: ToolCall) => void
   updateToolCall: (id: string, updates: Partial<ToolCall>) => void
-  // Smart shortcut
   incrementUserMessageCount: () => number
   setSmartShortcut: (shortcut: string | null) => void
 }
 
 const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+
+const SYSTEM_PROMPT = `You are Sonder, a helpful AI assistant for cybersecurity and hacking. You have access to tools like search_online.
+
+When you use a tool:
+1. The tool will execute and return results
+2. You will then receive those results
+3. Use the results to answer the user's question directly
+
+IMPORTANT: After receiving tool results, provide your answer based on those results. Do NOT say "let me search" or similar - the search already happened.`
 
 export function useChatHandler({
   model,
@@ -33,14 +45,18 @@ export function useChatHandler({
   incrementUserMessageCount,
   setSmartShortcut,
 }: UseChatHandlerOptions) {
-  const [flavorWord, setFlavorWord] = useState('')
-  const [showStatus, setShowStatus] = useState(false)
-  const [streamStartTime, setStreamStartTime] = useState(0)
-  const [tokenCount, setTokenCount] = useState(0)
-  const abortControllerRef = useRef<AbortController | null>(null)
+  // Compose smaller hooks
+  const { flavorWord, showStatus, fetchFlavorWord, resetFlavorWord } = useFlavorWord()
+  const { streamStartTime, tokenCount, startStreaming, updateTokenCount, endStreaming, cancelStream, abortControllerRef } = useStreaming()
+  const { checkAndGenerateShortcut } = useSmartShortcut({ messages, setSmartShortcut })
+  const { registerToolCall, executeToolCall } = useToolExecutor({ addToolCall, updateToolCall })
 
   const handleSendMessage = useCallback(
     async (content: string) => {
+      // Clear any existing plan from previous message
+      usePlanStore.getState().clear()
+
+      // Add user message
       const userMessageId = generateId()
       addMessage({
         id: userMessageId,
@@ -50,23 +66,11 @@ export function useChatHandler({
         isComplete: true,
       })
 
-      // Track user message count and generate smart shortcut every 3 messages
+      // Check for smart shortcut generation
       const newCount = incrementUserMessageCount()
-      if (newCount > 0 && newCount % 3 === 0) {
-        // Build conversation summary for smart shortcut
-        const recentMessages = [...messages.slice(-10), { variant: 'user' as const, content }]
-        const summary = recentMessages
-          .map((m) => `${m.variant}: ${m.content.slice(0, 200)}`)
-          .join('\n')
+      checkAndGenerateShortcut(content, newCount)
 
-        // Generate smart shortcut asynchronously
-        getSmartShortcut(summary).then((shortcut) => {
-          if (shortcut) {
-            setSmartShortcut(shortcut)
-          }
-        })
-      }
-
+      // Add placeholder AI message
       const aiMessageId = generateId()
       addMessage({
         id: aiMessageId,
@@ -77,42 +81,20 @@ export function useChatHandler({
         isStreaming: true,
       })
 
-      // Setup streaming state
+      // Setup streaming
       setIsStreaming(true)
       setStreamingMessageId(aiMessageId)
-      setStreamStartTime(Date.now())
-      setTokenCount(0)
-      setShowStatus(false)
-      setFlavorWord('')
+      const abortController = startStreaming()
 
-      // Create abort controller for cancellation
-      const abortController = new AbortController()
-      abortControllerRef.current = abortController
-
-      // Get flavor word from Haiku - only show status once we have it
-      getFlavorWord(content).then((word) => {
-        if (word) {
-          setFlavorWord(word)
-          setShowStatus(true)
-        }
-      })
+      // Fetch flavor word asynchronously
+      fetchFlavorWord(content)
 
       let currentMessageId = aiMessageId
 
       try {
-        // Build message history for context (only completed messages)
+        // Build message history
         const chatMessages: APIMessage[] = [
-          {
-            role: 'system',
-            content: `You are Sonder, a helpful AI assistant for cybersecurity and hacking. You have access to tools like search_online.
-
-When you use a tool:
-1. The tool will execute and return results
-2. You will then receive those results
-3. Use the results to answer the user's question directly
-
-IMPORTANT: After receiving tool results, provide your answer based on those results. Do NOT say "let me search" or similar - the search already happened.`,
-          },
+          { role: 'system', content: SYSTEM_PROMPT },
           ...messages
             .filter((msg) => msg.isComplete && msg.variant !== 'error')
             .map((msg) => ({
@@ -122,9 +104,10 @@ IMPORTANT: After receiving tool results, provide your answer based on those resu
           { role: 'user' as const, content },
         ]
 
-        // Tool call loop - keep going until AI finishes without tool calls
+        // Tool call loop
         let continueLoop = true
         let isFirstCall = true
+
         while (continueLoop && !abortController.signal.aborted) {
           const pendingToolCalls: ToolCallRequest[] = []
 
@@ -133,51 +116,32 @@ IMPORTANT: After receiving tool results, provide your answer based on those resu
             {
               onChunk: (chunk, tokens) => {
                 appendToStreamingMessage(chunk)
-                setTokenCount(tokens)
+                updateTokenCount(tokens)
               },
               onToolCall: (toolCall) => {
-                // Add tool call to UI
-                const toolId = `tool-${toolCall.id}`
-                addToolCall({
-                  id: toolId,
-                  toolName: toolCall.name,
-                  params: toolCall.args,
-                  status: 'executing',
-                  messageId: currentMessageId,
-                })
+                registerToolCall(toolCall, currentMessageId)
                 pendingToolCalls.push(toolCall)
               },
             },
             model,
             abortController.signal,
-            isFirstCall, // Only use tools on first call
+            isFirstCall,
           )
 
-          // If there are tool calls, execute them and continue
           if (result.toolCalls.length > 0) {
-            // Mark the thinking message as complete
+            // Mark thinking message as complete
             updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
 
-            // Execute each tool call
+            // Execute tool calls and add results to history
             for (const toolCall of result.toolCalls) {
-              const toolId = `tool-${toolCall.id}`
-              const toolResult = await executeTool(toolCall.name as ToolName, toolCall.args)
-
-              // Update tool UI with result
-              updateToolCall(toolId, {
-                status: toolResult.success ? 'complete' : 'error',
-                summary: toolResult.summary,
-                fullResult: toolResult.fullResult,
-              })
-
-              // Add tool result to message history for next iteration
+              const { result: toolResult } = await executeToolCall(toolCall)
               chatMessages.push({
                 role: 'user',
                 content: `[Tool Result for ${toolCall.name}]\n${toolResult.fullResult}\n\nNow provide your answer based on these search results.`,
               })
             }
 
-            // Create a NEW message for the answer
+            // Create new message for AI response
             const answerMessageId = generateId()
             addMessage({
               id: answerMessageId,
@@ -189,11 +153,8 @@ IMPORTANT: After receiving tool results, provide your answer based on those resu
             })
             currentMessageId = answerMessageId
             setStreamingMessageId(answerMessageId)
-
-            // Continue the loop to get AI's response after tool results
-            isFirstCall = false // Disable tools for subsequent calls
+            isFirstCall = false
           } else {
-            // No tool calls - AI is done
             continueLoop = false
           }
         }
@@ -212,25 +173,35 @@ IMPORTANT: After receiving tool results, provide your answer based on those resu
           })
         }
       } finally {
-        // Mark message as interrupted if abort signal was triggered
-        if (abortController.signal.aborted) {
+        if (abortControllerRef.current?.signal.aborted) {
           updateMessage(currentMessageId, { isInterrupted: true })
         }
         setIsStreaming(false)
         setStreamingMessageId(null)
-        abortControllerRef.current = null
-        setShowStatus(false)
-        setFlavorWord('')
+        endStreaming()
+        resetFlavorWord()
       }
     },
-    [messages, model, addMessage, updateMessage, appendToStreamingMessage, setIsStreaming, setStreamingMessageId, addToolCall, updateToolCall, incrementUserMessageCount, setSmartShortcut],
+    [
+      messages,
+      model,
+      addMessage,
+      updateMessage,
+      appendToStreamingMessage,
+      setIsStreaming,
+      setStreamingMessageId,
+      incrementUserMessageCount,
+      fetchFlavorWord,
+      resetFlavorWord,
+      startStreaming,
+      updateTokenCount,
+      endStreaming,
+      checkAndGenerateShortcut,
+      registerToolCall,
+      executeToolCall,
+      abortControllerRef,
+    ],
   )
-
-  const cancelStream = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-  }, [])
 
   return {
     handleSendMessage,

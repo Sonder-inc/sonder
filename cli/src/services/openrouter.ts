@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { streamText, generateText } from 'ai'
-import { z } from 'zod'
 import type { CoreMessage } from 'ai'
+import { availableTools } from '../tools'
 
 export type Message = CoreMessage
 
@@ -31,6 +31,8 @@ const FALLBACK_WORDS = [
 const SMART_SHORTCUT_PROMPT = `You are predicting what the user will ask for next. Based on this conversation, what is the user most likely to request as their next message? Think about:
 - What problem are they solving?
 - What's the natural next step in their workflow?
+- What is their research direction?
+- What action would give most information?
 - What would they logically ask for after this?
 
 Reply with ONLY the predicted request (3-8 words), lowercase, no punctuation. Write it as if you ARE the user making the request.
@@ -107,16 +109,6 @@ export async function getSmartShortcut(conversationSummary: string): Promise<str
   } catch {
     return null
   }
-}
-
-// Define tools using Vercel AI SDK format
-export const availableTools = {
-  search_online: {
-    description: 'Search the web for information. Use this when you need current information, documentation, or to find resources online.',
-    inputSchema: z.object({
-      query: z.string().describe('The search query'),
-    }),
-  },
 }
 
 export interface StreamCallbacks {

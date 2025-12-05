@@ -1,46 +1,35 @@
-import type { ToolResult } from './index'
+import { z } from 'zod'
+import { defineTool, type ToolResult } from './types'
 
-export const searchOnlineSchema = {
-  type: 'function' as const,
-  function: {
-    name: 'search_online',
-    description: 'Search the web for information. Use this when you need current information, documentation, writeups, or to find resources online.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'The search query',
-        },
-      },
-      required: ['query'],
-    },
+const searchParams = z.object({
+  query: z.string().describe('The search query'),
+})
+
+export const searchOnline = defineTool({
+  name: 'search_online',
+  description: 'Search the web for information. Use this when you need current information, documentation, writeups, or to find resources online.',
+  parameters: searchParams,
+  execute: async ({ query }): Promise<ToolResult> => {
+    if (!query) {
+      return {
+        success: false,
+        summary: 'No search query provided',
+        fullResult: 'Error: Missing required parameter "query"',
+      }
+    }
+
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY
+    if (!firecrawlKey) {
+      return {
+        success: false,
+        summary: 'No API key',
+        fullResult: 'FIRECRAWL_API_KEY not set. Get one at https://firecrawl.dev',
+      }
+    }
+
+    return searchWithFirecrawl(query, firecrawlKey)
   },
-}
-
-export async function searchOnline(params: Record<string, unknown>): Promise<ToolResult> {
-  const query = params.query as string
-
-  if (!query) {
-    return {
-      success: false,
-      summary: 'No search query provided',
-      fullResult: 'Error: Missing required parameter "query"',
-    }
-  }
-
-  // Use Firecrawl for search + scraping
-  const firecrawlKey = process.env.FIRECRAWL_API_KEY
-  if (!firecrawlKey) {
-    return {
-      success: false,
-      summary: 'No API key',
-      fullResult: 'FIRECRAWL_API_KEY not set. Get one at https://firecrawl.dev',
-    }
-  }
-
-  return searchWithFirecrawl(query, firecrawlKey)
-}
+})
 
 async function searchWithFirecrawl(query: string, apiKey: string): Promise<ToolResult> {
   try {
@@ -83,7 +72,6 @@ async function searchWithFirecrawl(query: string, apiKey: string): Promise<ToolR
       }
     }
 
-    // Format results with full content
     const results = data.data
     let fullResult = `Search results for "${query}":\n\n`
 
@@ -95,7 +83,6 @@ async function searchWithFirecrawl(query: string, apiKey: string): Promise<ToolR
         fullResult += `Description: ${r.description}\n`
       }
       if (r.markdown) {
-        // Truncate content if too long
         const content = r.markdown.length > 2000
           ? r.markdown.slice(0, 2000) + '\n...[truncated]'
           : r.markdown

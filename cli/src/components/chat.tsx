@@ -9,7 +9,7 @@ import { useTheme } from '../hooks/use-theme'
 import { useTerminalDimensions } from '../hooks/use-terminal-dimensions'
 import { useChatStore } from '../state/chat-store'
 
-import type { MultilineInputHandle } from './multiline-input'
+import type { MultilineInputHandle } from './input'
 import type { KeyEvent, ScrollBoxRenderable } from '@opentui/core'
 
 interface ChatProps {

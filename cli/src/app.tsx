@@ -5,7 +5,8 @@ import { useTerminalDimensions } from './hooks/use-terminal-dimensions'
 import { useChatHandler } from './hooks/use-chat-handler'
 import { useAppKeyboard } from './hooks/use-app-keyboard'
 import { useChatStore } from './state/chat-store'
-import { InputBox } from './components/input-box'
+import { usePlanStore } from './state/plan-store'
+import { InputBox, type MultilineInputHandle } from './components/input'
 import { WelcomeBanner } from './components/welcome-banner'
 import { StreamingStatus } from './components/streaming-status'
 import { MessageList } from './components/chat/MessageList'
@@ -14,8 +15,6 @@ import { CommandPanel } from './components/panels/CommandPanel'
 import { ContextPanel } from './components/panels/ContextPanel'
 import { Sidebar } from './components/Sidebar'
 import { MODELS, MODES, MODEL_IDS } from './constants/app-constants'
-
-import type { MultilineInputHandle } from './components/multiline-input'
 import type { ScrollBoxRenderable } from '@opentui/core'
 
 interface AppProps {
@@ -185,18 +184,18 @@ export const App = ({ initialPrompt }: AppProps) => {
             expandedToolId={expandedToolId}
             onToggleExpandTool={toggleExpandedTool}
           />
-        </scrollbox>
 
-        {/* Streaming status - always reserves space, content shown when ready */}
-        <box style={{ marginLeft: 2, height: isStreaming ? 2 : 0 }}>
+          {/* Streaming status with plan - inside scrollbox */}
           {isStreaming && showStatus && flavorWord && (
-            <StreamingStatus
-              flavorWord={flavorWord}
-              startTime={streamStartTime}
-              tokenCount={tokenCount}
-            />
+            <box style={{ marginLeft: 1, marginTop: 1 }}>
+              <StreamingStatus
+                flavorWord={flavorWord}
+                startTime={streamStartTime}
+                tokenCount={tokenCount}
+              />
+            </box>
           )}
-        </box>
+        </scrollbox>
 
         {/* Input box */}
         <box style={{ flexDirection: 'column', flexShrink: 0, marginLeft: 1, marginRight: 1, marginBottom: 1 }}>

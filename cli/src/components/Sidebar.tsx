@@ -7,6 +7,12 @@ interface SidebarProps {
 
 export const Sidebar = ({ width, smartShortcut }: SidebarProps) => {
   const theme = useTheme()
+  const contentWidth = width - 4
+
+  const truncate = (text: string, maxLen: number) => {
+    if (text.length <= maxLen) return text
+    return text.slice(0, maxLen - 1) + '…'
+  }
 
   return (
     <box
@@ -23,14 +29,18 @@ export const Sidebar = ({ width, smartShortcut }: SidebarProps) => {
     >
       {/* Smart shortcut queue */}
       {smartShortcut && (
-        <text>
-          <span fg="#facc15">{'>|'}</span>
-          <span fg={theme.muted}> {smartShortcut}</span>
-        </text>
+        <box style={{ height: 1 }}>
+          <text>
+            <span fg="#facc15">{'>|'}</span>
+            <span fg={theme.muted}> {truncate(smartShortcut, contentWidth - 3)}</span>
+          </text>
+        </box>
       )}
 
-      {/* Plan section */}
-      <text style={{ fg: theme.muted, marginTop: 1 }}>Plan</text>
+      {/* Placeholder for future sidebar content */}
+      {!smartShortcut && (
+        <text style={{ fg: theme.muted }}>Sidebar</text>
+      )}
     </box>
   )
 }
