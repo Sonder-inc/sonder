@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react'
 
-import { InputCursor } from './input-cursor'
+
 import { useTheme } from '../hooks/use-theme'
 import { useChatStore } from '../state/chat-store'
 
@@ -76,6 +76,7 @@ interface MultilineInputProps {
   placeholder?: string
   focused?: boolean
   shouldBlinkCursor?: boolean
+  hideCursor?: boolean
   maxHeight?: number
   minHeight?: number
   width: number
@@ -96,6 +97,7 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
       placeholder = '',
       focused = true,
       shouldBlinkCursor,
+      hideCursor = false,
       maxHeight = 5,
       minHeight = 1,
       width,
@@ -111,6 +113,7 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
     const scrollBoxRef = useRef<ScrollBoxRenderable | null>(null)
     const [measuredCols, setMeasuredCols] = useState<number | null>(null)
     const [lastActivity, setLastActivity] = useState(Date.now())
+    const [cursorVisible, setCursorVisible] = useState(true)
 
     const valueRef = useRef(value)
     const cursorPositionRef = useRef(cursorPosition)
@@ -122,7 +125,22 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
 
     useEffect(() => {
       setLastActivity(Date.now())
+      setCursorVisible(true)
     }, [value, cursorPosition])
+
+    // Blink cursor effect
+    useEffect(() => {
+      if (!focused || !effectiveShouldBlinkCursor) {
+        setCursorVisible(true)
+        return
+      }
+
+      const blinkInterval = setInterval(() => {
+        setCursorVisible((prev) => !prev)
+      }, 530)
+
+      return () => clearInterval(blinkInterval)
+    }, [focused, effectiveShouldBlinkCursor, lastActivity])
 
     const textRef = useRef<TextRenderable | null>(null)
 
@@ -229,7 +247,7 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
 
     const isPlaceholder = value.length === 0 && placeholder.length > 0
     const displayValue = isPlaceholder ? placeholder : value
-    const showCursor = focused
+    const showCursor = focused && !hideCursor
 
     const displayValueForRendering = displayValue.replace(/\t/g, ' '.repeat(TAB_WIDTH))
 
@@ -609,8 +627,8 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
             flexShrink: 0,
           },
           wrapperOptions: {
-            paddingLeft: 1,
-            paddingRight: 1,
+            paddingLeft: 0,
+            paddingRight: 0,
             border: false,
           },
           contentOptions: {
@@ -635,22 +653,22 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
               ) : (
                 beforeCursor
               )}
-              {shouldHighlight ? (
-                <span
-                  bg={highlightBg}
-                  fg={theme.background}
-                  attributes={TextAttributes.BOLD}
-                >
-                  {activeChar === ' ' ? '\u00a0' : activeChar}
-                </span>
+              {cursorVisible ? (
+                shouldHighlight ? (
+                  <span
+                    bg={highlightBg}
+                    fg={theme.background}
+                    attributes={TextAttributes.BOLD}
+                  >
+                    {activeChar === ' ' ? '\u00a0' : activeChar}
+                  </span>
+                ) : (
+                  <span bg={theme.foreground} fg={theme.background}>
+                    {activeChar === ' ' ? '\u00a0' : activeChar}
+                  </span>
+                )
               ) : (
-                <InputCursor
-                  visible={true}
-                  focused={focused}
-                  shouldBlink={effectiveShouldBlinkCursor}
-                  color={theme.muted}
-                  key={lastActivity}
-                />
+                <span fg={theme.muted}>{activeChar === ' ' ? '\u00a0' : activeChar}</span>
               )}
               {/* Render afterCursor with slash command highlighting */}
               {(() => {

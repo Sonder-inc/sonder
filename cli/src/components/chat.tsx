@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useKeyboard } from '@opentui/react'
 
-import { ChatInputBar } from './chat-input-bar'
+
 import { MessageBlock } from './message-block'
 import { WelcomeBanner } from './welcome-banner'
 import { useTheme } from '../hooks/use-theme'
@@ -144,17 +144,7 @@ export const Chat = ({ onSendMessage }: ChatProps) => {
           backgroundColor: 'transparent',
         }}
       >
-        {/* Input bar */}
-        <ChatInputBar
-          ref={inputRef}
-          inputValue={inputValue}
-          cursorPosition={cursorPosition}
-          setInputValue={setInputValue}
-          inputFocused={inputFocused}
-          inputWidth={inputWidth}
-          onSubmit={handleSubmit}
-          isStreaming={isStreaming}
-        />
+        
 
         {/* Status bar */}
         <box

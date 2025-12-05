@@ -1,6 +1,5 @@
+export { Cursor } from './cursor'
 export { Chat } from './chat'
-export { ChatInputBar } from './chat-input-bar'
-export { InputCursor } from './input-cursor'
 export { MessageBlock } from './message-block'
 export { MultilineInput, type MultilineInputHandle } from './multiline-input'
 export { StatusBar } from './status-bar'

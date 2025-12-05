@@ -1,6 +1,7 @@
 import { forwardRef, useRef } from 'react'
 
 import { MultilineInput, type MultilineInputHandle } from './multiline-input'
+import { Cursor } from './cursor'
 import { useTheme } from '../hooks/use-theme'
 import type { InputValue } from '../state/chat-store'
 import type { KeyEvent } from '@opentui/core'
@@ -46,29 +47,27 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
       }
     }
 
-    // Calculate widths for manual border drawing
+    // Calculate widths
     const innerWidth = width - 2 // minus left and right border chars
 
-    // Bottom border layout: ╰─── model ─── mode ─── hint ───╯
-    const dashesBeforeModel = 3
-    const separator = ' ─── '
+    // Bottom border: ╰─── Sonder ─── stealth ─── ? for shortcuts ───╯
     const hintText = hintOverride ?? '? for shortcuts'
-
-    // Calculate remaining dashes for the end
-    const usedWidth = dashesBeforeModel + 1 + model.length + separator.length + mode.length + separator.length + hintText.length + 1
-    const dashesAfterHint = Math.max(0, innerWidth - usedWidth)
+    const sep = ' ─── '
+    const bottomContent = `─── ${model}${sep}${mode}${sep}${hintText} `
+    const dashesAfter = Math.max(0, innerWidth - bottomContent.length)
 
     return (
       <box style={{ flexDirection: 'column', width }}>
-        {/* TOP BORDER */}
-        <text style={{ fg: theme.borderColor }}>
-          ╭{'─'.repeat(innerWidth)}╮
-        </text>
+        {/* TOP BORDER - using box like welcome banner */}
+        <box style={{ flexDirection: 'row' }}>
+          <text style={{ fg: theme.borderColor }}>{'╭' + '─'.repeat(innerWidth) + '╮'}</text>
+        </box>
 
-        {/* MIDDLE: │ > input content │ */}
-        <box style={{ flexDirection: 'row', width }}>
-          <text style={{ fg: theme.borderColor }}>│ </text>
-          <text style={{ fg: theme.muted }}>{'>'} </text>
+        {/* MIDDLE ROW */}
+        <box style={{ flexDirection: 'row' }}>
+          <text style={{ fg: theme.borderColor }}>{'│ '}</text>
+          <text style={{ fg: '#888888' }}>{'> '}</text>
+          {inputValue.length === 0 && <Cursor visible={focused} />}
           <box style={{ flexGrow: 1 }}>
             <MultilineInput
               ref={inputRef}
@@ -82,20 +81,21 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
               maxHeight={5}
               minHeight={1}
               onKeyIntercept={onKeyIntercept}
+              hideCursor={inputValue.length === 0}
             />
           </box>
-          <text style={{ fg: theme.borderColor }}> │</text>
+          <text style={{ fg: theme.borderColor }}>{'│'}</text>
         </box>
 
-        {/* BOTTOM BORDER with embedded status */}
-        <box style={{ flexDirection: 'row' }}>
-          <text style={{ fg: theme.borderColor }}>╰{'─'.repeat(dashesBeforeModel)} </text>
+        {/* BOTTOM BORDER */}
+        <box style={{ flexDirection: 'row', marginTop: -1 }}>
+          <text style={{ fg: theme.borderColor }}>{'╰─── '}</text>
           <text style={{ fg: theme.muted }}>{model}</text>
-          <text style={{ fg: theme.borderColor }}>{separator}</text>
+          <text style={{ fg: theme.borderColor }}>{sep}</text>
           <text style={{ fg: theme.muted }}>{mode}</text>
-          <text style={{ fg: theme.borderColor }}>{separator}</text>
+          <text style={{ fg: theme.borderColor }}>{sep}</text>
           <text style={{ fg: hintOverride ? theme.foreground : theme.muted }}>{hintText}</text>
-          <text style={{ fg: theme.borderColor }}> {'─'.repeat(dashesAfterHint)}╯</text>
+          <text style={{ fg: theme.borderColor }}>{' ' + '─'.repeat(dashesAfter) + '╯'}</text>
         </box>
       </box>
     )
