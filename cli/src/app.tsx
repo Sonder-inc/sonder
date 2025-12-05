@@ -241,14 +241,27 @@ export const App = ({ initialPrompt }: AppProps) => {
         }
         return true // consume the key
       }
-      // Tab or Enter: autocomplete selected command
-      if (showCommands && (key.name === 'tab' || key.name === 'return' || key.name === 'enter')) {
+      // Tab: autocomplete selected command (just fill in, don't submit)
+      if (showCommands && key.name === 'tab') {
         const filtered = searchCommands(inputValue)
         if (filtered.length > 0) {
           const selected = filtered[selectedCommandIndex] ?? filtered[0]
           setInputValue({ text: selected.name + ' ', cursorPosition: selected.name.length + 1, lastEditDueToNav: false })
           setShowCommands(false)
           setSelectedCommandIndex(0)
+        }
+        return true // consume the key
+      }
+      // Enter: autocomplete and submit selected command
+      if (showCommands && (key.name === 'return' || key.name === 'enter')) {
+        const filtered = searchCommands(inputValue)
+        if (filtered.length > 0) {
+          const selected = filtered[selectedCommandIndex] ?? filtered[0]
+          setShowCommands(false)
+          setSelectedCommandIndex(0)
+          // Submit the command directly
+          handleSendMessage(selected.name)
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
         }
         return true // consume the key
       }
@@ -273,7 +286,7 @@ export const App = ({ initialPrompt }: AppProps) => {
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, inputValue, selectedCommandIndex],
+    [showShortcuts, showCommands, showContext, inputValue, selectedCommandIndex, handleSendMessage],
   )
 
   // Global keyboard handler for Ctrl+C and backspace to close panels
