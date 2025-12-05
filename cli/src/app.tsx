@@ -25,7 +25,7 @@ const MODEL_IDS: Record<(typeof MODELS)[number], string> = {
   GPT5: 'openai/gpt-5.1',
   'G3 Pro': 'google/gemini-3-pro-preview',
 }
-const MODES = ['stealth', 'osint', 'semi-auto', 'kill'] as const
+const MODES = ['stealth', 'osint', 'accept', 'kill'] as const
 
 // Command definitions for the command menu
 const COMMANDS = [
@@ -39,36 +39,48 @@ const COMMANDS = [
   { name: '/login', aliases: ['logout'], description: 'Login or logout when already logged in' },
 ] as const
 
-// Trie node for command prefix matching
-class TrieNode {
-  children: Map<string, TrieNode> = new Map()
-  commands: typeof COMMANDS[number][] = []
+// Thread/context menu items
+const CONTEXT_ITEMS = [
+  { name: '*switch', label: 'switch' },
+  { name: '*previous', label: 'previous' },
+  { name: '*parent', label: 'parent' },
+  { name: '*editor', label: 'editor' },
+  { name: '*browser', label: 'browser' },
+  { name: '*copy', label: 'copy' },
+  { name: '*think?', label: 'think?' },
+  { name: '*support', label: 'support' },
+  { name: '*new', label: 'new' },
+  { name: '*handoff', label: 'handoff' },
+  { name: '*fork', label: 'fork' },
+] as const
+
+// Generic trie node for prefix matching
+class TrieNode<T> {
+  children: Map<string, TrieNode<T>> = new Map()
+  items: T[] = []
 }
 
-// Build trie from commands
-function buildCommandTrie(commands: typeof COMMANDS): TrieNode {
-  const root = new TrieNode()
+// Build trie from items with a key extractor
+function buildTrie<T>(items: readonly T[], getKey: (item: T) => string): TrieNode<T> {
+  const root = new TrieNode<T>()
 
-  for (const cmd of commands) {
+  for (const item of items) {
     let node = root
-    // Insert the command name (including the /)
-    for (const char of cmd.name.toLowerCase()) {
+    for (const char of getKey(item).toLowerCase()) {
       if (!node.children.has(char)) {
-        node.children.set(char, new TrieNode())
+        node.children.set(char, new TrieNode<T>())
       }
       node = node.children.get(char)!
-      node.commands.push(cmd)
+      node.items.push(item)
     }
   }
 
   return root
 }
 
-const commandTrie = buildCommandTrie(COMMANDS)
-
-// Search trie for commands matching a prefix
-function searchCommands(prefix: string): typeof COMMANDS[number][] {
-  let node = commandTrie
+// Search trie for items matching a prefix
+function searchTrie<T>(trie: TrieNode<T>, prefix: string): T[] {
+  let node = trie
   const lowerPrefix = prefix.toLowerCase()
 
   for (const char of lowerPrefix) {
@@ -78,8 +90,16 @@ function searchCommands(prefix: string): typeof COMMANDS[number][] {
     node = node.children.get(char)!
   }
 
-  return node.commands
+  return node.items
 }
+
+// Build tries
+const commandTrie = buildTrie(COMMANDS, (cmd) => cmd.name)
+const contextTrie = buildTrie(CONTEXT_ITEMS, (item) => item.name)
+
+// Convenience search functions
+const searchCommands = (prefix: string) => searchTrie(commandTrie, prefix)
+const searchContext = (prefix: string) => searchTrie(contextTrie, prefix)
 
 export const App = ({ initialPrompt }: AppProps) => {
   const theme = useTheme()
@@ -91,7 +111,9 @@ export const App = ({ initialPrompt }: AppProps) => {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCommands, setShowCommands] = useState(false)
   const [showContext, setShowContext] = useState(false)
-  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
+  const [selectedMenuIndex, setSelectedMenuIndex] = useState(0)
+  const [pendingExit, setPendingExit] = useState(false)
+  const pendingExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const {
     messages,
@@ -211,69 +233,70 @@ export const App = ({ initialPrompt }: AppProps) => {
         setShowShortcuts((prev) => !prev)
         return true
       }
-      // Shift+* (asterisk): toggle context panel
-      if (key.sequence === '*') {
-        if (showCommands) {
-          // do nothing if commands panel is open
-          return true
-        }
+      // *: show context panel, exit shortcuts/commands if open
+      if (key.sequence === '*' && inputValue.length === 0) {
         setShowShortcuts(false)
-        setShowContext((prev) => !prev)
-        return true
+        setShowCommands(false)
+        setShowContext(true)
+        setSelectedMenuIndex(0)
+        return false // let it type the *
       }
       // /: show commands panel, exit shortcuts/context if open
       if (key.sequence === '/' && inputValue.length === 0) {
         setShowShortcuts(false)
         setShowContext(false)
         setShowCommands(true)
-        setSelectedCommandIndex(0)
+        setSelectedMenuIndex(0)
         return false // let it type the /
       }
-      // Arrow keys: navigate command menu
-      if (showCommands && (key.name === 'up' || key.name === 'down')) {
-        const filtered = searchCommands(inputValue)
+      // Arrow keys: navigate command menu or context menu
+      if ((showCommands || showContext) && (key.name === 'up' || key.name === 'down')) {
+        const filtered = showCommands ? searchCommands(inputValue) : searchContext(inputValue)
         if (filtered.length > 0) {
           if (key.name === 'up') {
-            setSelectedCommandIndex((prev) => (prev - 1 + filtered.length) % filtered.length)
+            setSelectedMenuIndex((prev) => (prev - 1 + filtered.length) % filtered.length)
           } else {
-            setSelectedCommandIndex((prev) => (prev + 1) % filtered.length)
+            setSelectedMenuIndex((prev) => (prev + 1) % filtered.length)
           }
         }
         return true // consume the key
       }
-      // Tab: autocomplete selected command (just fill in, don't submit)
-      if (showCommands && key.name === 'tab') {
-        const filtered = searchCommands(inputValue)
+      // Tab: autocomplete selected item (just fill in, don't submit)
+      if ((showCommands || showContext) && key.name === 'tab') {
+        const filtered = showCommands ? searchCommands(inputValue) : searchContext(inputValue)
         if (filtered.length > 0) {
-          const selected = filtered[selectedCommandIndex] ?? filtered[0]
+          const selected = filtered[selectedMenuIndex] ?? filtered[0]
           setInputValue({ text: selected.name + ' ', cursorPosition: selected.name.length + 1, lastEditDueToNav: false })
           setShowCommands(false)
-          setSelectedCommandIndex(0)
+          setShowContext(false)
+          setSelectedMenuIndex(0)
         }
         return true // consume the key
       }
-      // Enter: autocomplete and submit selected command
-      if (showCommands && (key.name === 'return' || key.name === 'enter')) {
-        const filtered = searchCommands(inputValue)
+      // Enter: select item from command menu or context menu
+      if ((showCommands || showContext) && (key.name === 'return' || key.name === 'enter')) {
+        const filtered = showCommands ? searchCommands(inputValue) : searchContext(inputValue)
         if (filtered.length > 0) {
-          const selected = filtered[selectedCommandIndex] ?? filtered[0]
+          const selected = filtered[selectedMenuIndex] ?? filtered[0]
           setShowCommands(false)
-          setSelectedCommandIndex(0)
-          // Submit the command directly
+          setShowContext(false)
+          setSelectedMenuIndex(0)
           handleSendMessage(selected.name)
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
         }
         return true // consume the key
       }
-      // Space: close commands panel (command is complete)
-      if (key.sequence === ' ' && showCommands) {
+      // Space: close menu panels (item is complete)
+      if (key.sequence === ' ' && (showCommands || showContext)) {
         setShowCommands(false)
+        setShowContext(false)
         return false // let it type the space
       }
-      // Backspace: close commands panel if input will no longer start with /
-      if (key.name === 'backspace' && showCommands) {
-        if (inputValue === '/' || !inputValue.startsWith('/')) {
+      // Backspace: close panel if input will no longer start with / or *
+      if (key.name === 'backspace' && (showCommands || showContext)) {
+        if (inputValue === '/' || inputValue === '*' || (!inputValue.startsWith('/') && !inputValue.startsWith('*'))) {
           setShowCommands(false)
+          setShowContext(false)
         }
         return false // let it delete the character
       }
@@ -286,7 +309,7 @@ export const App = ({ initialPrompt }: AppProps) => {
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, inputValue, selectedCommandIndex, handleSendMessage],
+    [showShortcuts, showCommands, showContext, inputValue, selectedMenuIndex, handleSendMessage],
   )
 
   // Global keyboard handler for Ctrl+C and backspace to close panels
@@ -294,10 +317,28 @@ export const App = ({ initialPrompt }: AppProps) => {
     useCallback(
       (key: KeyEvent) => {
         if (key.ctrl && key.name === 'c') {
-          if (inputValue.length === 0) {
+          if (inputValue.length > 0) {
+            // Clear input and reset pending exit
+            setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+            setPendingExit(false)
+            if (pendingExitTimerRef.current) {
+              clearTimeout(pendingExitTimerRef.current)
+              pendingExitTimerRef.current = null
+            }
+          } else if (pendingExit) {
+            // Second ctrl+c with empty input - actually exit
             process.exit(0)
           } else {
-            setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+            // First ctrl+c with empty input - set pending and show warning in input box
+            setPendingExit(true)
+            // Reset after 3 seconds
+            if (pendingExitTimerRef.current) {
+              clearTimeout(pendingExitTimerRef.current)
+            }
+            pendingExitTimerRef.current = setTimeout(() => {
+              setPendingExit(false)
+              pendingExitTimerRef.current = null
+            }, 3000)
           }
         }
         // Backspace closes shortcuts/context panels when input is empty
@@ -305,8 +346,16 @@ export const App = ({ initialPrompt }: AppProps) => {
           setShowShortcuts(false)
           setShowContext(false)
         }
+        // Any other key resets pending exit
+        if (!key.ctrl && key.name !== 'c' && pendingExit) {
+          setPendingExit(false)
+          if (pendingExitTimerRef.current) {
+            clearTimeout(pendingExitTimerRef.current)
+            pendingExitTimerRef.current = null
+          }
+        }
       },
-      [inputValue, setInputValue, showShortcuts, showContext],
+      [inputValue, setInputValue, showShortcuts, showContext, pendingExit],
     ),
   )
 
@@ -316,15 +365,15 @@ export const App = ({ initialPrompt }: AppProps) => {
     }
   }, [])
 
-  // Reset selected command index when input changes (to keep it in valid range)
+  // Reset selected menu index when input changes (to keep it in valid range)
   useEffect(() => {
-    if (showCommands) {
-      const filtered = searchCommands(inputValue)
-      if (selectedCommandIndex >= filtered.length) {
-        setSelectedCommandIndex(Math.max(0, filtered.length - 1))
+    if (showCommands || showContext) {
+      const filtered = showCommands ? searchCommands(inputValue) : searchContext(inputValue)
+      if (selectedMenuIndex >= filtered.length) {
+        setSelectedMenuIndex(Math.max(0, filtered.length - 1))
       }
     }
-  }, [inputValue, showCommands, selectedCommandIndex])
+  }, [inputValue, showCommands, showContext, selectedMenuIndex])
 
   // Layout calculations
   const sidebarWidth = Math.max(20, Math.floor(terminalWidth * 0.25))
@@ -403,6 +452,7 @@ export const App = ({ initialPrompt }: AppProps) => {
             model={MODELS[modelIndex]}
             mode={MODES[modeIndex]}
             onKeyIntercept={handleKeyIntercept}
+            hintOverride={pendingExit ? 'exit? [^C]' : undefined}
           />
 
           {/* Shortcuts panel - shown below input when ? is pressed */}
@@ -432,7 +482,7 @@ export const App = ({ initialPrompt }: AppProps) => {
             const filteredCommands = searchCommands(inputValue)
             if (filteredCommands.length === 0) return null
             // Clamp selected index to valid range
-            const clampedIndex = Math.min(selectedCommandIndex, filteredCommands.length - 1)
+            const clampedIndex = Math.min(selectedMenuIndex, filteredCommands.length - 1)
             return (
               <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
                 {filteredCommands.map((cmd, idx) => {
@@ -459,28 +509,25 @@ export const App = ({ initialPrompt }: AppProps) => {
           })()}
 
           {/* Context panel - shown below input when * is pressed */}
-          {showContext && (
-            <box style={{ flexDirection: 'row', marginLeft: 1, marginTop: 1, gap: 2 }}>
-              <box style={{ flexDirection: 'column' }}>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>switch</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>new</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>handoff</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>fork</span></text>
+          {showContext && (() => {
+            const filteredContext = searchContext(inputValue)
+            if (filteredContext.length === 0) return null
+            const clampedIndex = Math.min(selectedMenuIndex, filteredContext.length - 1)
+            return (
+              <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
+                {filteredContext.map((item, idx) => {
+                  const isSelected = idx === clampedIndex
+                  return (
+                    <text key={item.name} style={{ fg: theme.foreground }}>
+                      {isSelected ? (
+                        <ShimmerText text={item.label} primaryColor={theme.foreground} interval={80} />
+                      ) : item.label}
+                    </text>
+                  )
+                })}
               </box>
-              <box style={{ flexDirection: 'column' }}>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>switch to previous</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>switch to parent</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>set visibility</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>share with support</span></text>
-              </box>
-              <box style={{ flexDirection: 'column' }}>
-                <text style={{ fg: theme.muted }}>prompt  <span fg={theme.foreground}>open in editor</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>open in browser</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>copy url</span></text>
-                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>toggle thinking</span></text>
-              </box>
-            </box>
-          )}
+            )
+          })()}
         </box>
       </box>
 

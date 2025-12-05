@@ -1,6 +1,9 @@
+import { RGBA } from "@opentui/core"
+
 export type ThemeName = 'dark' | 'light'
 
 export type ChatTheme = {
+  text: string | RGBA | undefined
   name: ThemeName
   // Core colors
   background: string
@@ -68,6 +71,7 @@ export const darkTheme: ChatTheme = {
 
   codeBlockBg: '#18181b',
   codeBlockFg: '#a1a1aa',
+  text: undefined
 }
 
 export const lightTheme: ChatTheme = {
@@ -100,6 +104,7 @@ export const lightTheme: ChatTheme = {
 
   codeBlockBg: '#f4f4f5',
   codeBlockFg: '#52525b',
+  text: undefined
 }
 
 export const chatThemes: Record<ThemeName, ChatTheme> = {

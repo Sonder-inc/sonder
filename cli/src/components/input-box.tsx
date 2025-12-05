@@ -15,6 +15,7 @@ interface InputBoxProps {
   model?: string
   mode?: string
   onKeyIntercept?: (key: KeyEvent) => boolean
+  hintOverride?: string
 }
 
 export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
@@ -29,6 +30,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
       model = 'Sonder',
       mode = 'stealth',
       onKeyIntercept,
+      hintOverride,
     },
     ref,
   ) {
@@ -46,18 +48,24 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
 
     // Calculate widths for manual border drawing
     const innerWidth = width - 2 // minus left and right border chars
-    const dashesBeforeText = 3
-    const statusText = `${model} ─── ${mode} ─── ? for shortcuts`
-    const dashesAfterText = Math.max(0, innerWidth - dashesBeforeText - statusText.length - 2)
+
+    // Bottom border layout: ╰─── model ─── mode ─── hint ───╯
+    const dashesBeforeModel = 3
+    const separator = ' ─── '
+    const hintText = hintOverride ?? '? for shortcuts'
+
+    // Calculate remaining dashes for the end
+    const usedWidth = dashesBeforeModel + 1 + model.length + separator.length + mode.length + separator.length + hintText.length + 1
+    const dashesAfterHint = Math.max(0, innerWidth - usedWidth)
 
     return (
       <box style={{ flexDirection: 'column', width }}>
-        {/* Top border: ╭────────────────╮ */}
+        {/* TOP BORDER */}
         <text style={{ fg: theme.borderColor }}>
           ╭{'─'.repeat(innerWidth)}╮
         </text>
 
-        {/* Middle: │ > input content                    │ */}
+        {/* MIDDLE: │ > input content │ */}
         <box style={{ flexDirection: 'row', width }}>
           <text style={{ fg: theme.borderColor }}>│ </text>
           <text style={{ fg: theme.muted }}>{'>'} </text>
@@ -79,10 +87,16 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
           <text style={{ fg: theme.borderColor }}> │</text>
         </box>
 
-        {/* Bottom border with embedded status: ╰─── Sonder ─── stealth ─── ? for shortcuts ────╯ */}
-        <text style={{ fg: theme.borderColor }}>
-          ╰{'─'.repeat(dashesBeforeText)} <span fg={theme.muted}>{model}</span> ─── <span fg={theme.muted}>{mode}</span> ─── <span fg={theme.muted}>? for shortcuts</span> {'─'.repeat(dashesAfterText)}╯
-        </text>
+        {/* BOTTOM BORDER with embedded status */}
+        <box style={{ flexDirection: 'row' }}>
+          <text style={{ fg: theme.borderColor }}>╰{'─'.repeat(dashesBeforeModel)} </text>
+          <text style={{ fg: theme.muted }}>{model}</text>
+          <text style={{ fg: theme.borderColor }}>{separator}</text>
+          <text style={{ fg: theme.muted }}>{mode}</text>
+          <text style={{ fg: theme.borderColor }}>{separator}</text>
+          <text style={{ fg: hintOverride ? theme.foreground : theme.muted }}>{hintText}</text>
+          <text style={{ fg: theme.borderColor }}> {'─'.repeat(dashesAfterHint)}╯</text>
+        </box>
       </box>
     )
   },
