@@ -7,10 +7,23 @@ export type ChatMessage = {
   timestamp: Date
   isComplete: boolean
   isStreaming?: boolean
+  isInterrupted?: boolean
 }
 
 export type InputValue = {
   text: string
   cursorPosition: number
   lastEditDueToNav: boolean
+}
+
+export type ToolCallStatus = 'executing' | 'complete' | 'error'
+
+export type ToolCall = {
+  id: string
+  toolName: string
+  params: Record<string, unknown>
+  status: ToolCallStatus
+  summary?: string
+  fullResult?: string
+  messageId: string // Link to parent AI message
 }

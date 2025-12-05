@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
-import type { ChatMessage, InputValue } from '../types/chat'
+import type { ChatMessage, InputValue, ToolCall } from '../types/chat'
 
-export type { InputValue }
+export type { InputValue, ToolCall }
 
 export type ChatStoreState = {
   messages: ChatMessage[]
@@ -14,6 +14,11 @@ export type ChatStoreState = {
   isFocusSupported: boolean
   isStreaming: boolean
   streamingMessageId: string | null
+  toolCalls: ToolCall[]
+  expandedToolId: string | null
+  // Smart shortcut state
+  smartShortcut: string | null
+  userMessageCount: number
 }
 
 type ChatStoreActions = {
@@ -28,6 +33,13 @@ type ChatStoreActions = {
   setIsStreaming: (streaming: boolean) => void
   setStreamingMessageId: (id: string | null) => void
   appendToStreamingMessage: (content: string) => void
+  addToolCall: (toolCall: ToolCall) => void
+  updateToolCall: (id: string, updates: Partial<ToolCall>) => void
+  setExpandedToolId: (id: string | null) => void
+  toggleExpandedTool: (id: string) => void
+  // Smart shortcut actions
+  setSmartShortcut: (shortcut: string | null) => void
+  incrementUserMessageCount: () => number
   reset: () => void
 }
 
@@ -45,6 +57,10 @@ const initialState: ChatStoreState = {
   isFocusSupported: false,
   isStreaming: false,
   streamingMessageId: null,
+  toolCalls: [],
+  expandedToolId: null,
+  smartShortcut: '/init',  // First item in queue
+  userMessageCount: 0,
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -117,6 +133,43 @@ export const useChatStore = create<ChatStore>()(
         }
       }),
 
+    addToolCall: (toolCall) =>
+      set((state) => {
+        state.toolCalls.push(toolCall)
+      }),
+
+    updateToolCall: (id, updates) =>
+      set((state) => {
+        const toolCall = state.toolCalls.find((t) => t.id === id)
+        if (toolCall) {
+          Object.assign(toolCall, updates)
+        }
+      }),
+
+    setExpandedToolId: (id) =>
+      set((state) => {
+        state.expandedToolId = id
+      }),
+
+    toggleExpandedTool: (id) =>
+      set((state) => {
+        state.expandedToolId = state.expandedToolId === id ? null : id
+      }),
+
+    setSmartShortcut: (shortcut) =>
+      set((state) => {
+        state.smartShortcut = shortcut
+      }),
+
+    incrementUserMessageCount: () => {
+      let newCount = 0
+      set((state) => {
+        state.userMessageCount += 1
+        newCount = state.userMessageCount
+      })
+      return newCount
+    },
+
     reset: () =>
       set((state) => {
         state.messages = []
@@ -126,6 +179,10 @@ export const useChatStore = create<ChatStore>()(
         state.inputFocused = true
         state.isStreaming = false
         state.streamingMessageId = null
+        state.toolCalls = []
+        state.expandedToolId = null
+        state.smartShortcut = null
+        state.userMessageCount = 0
       }),
   })),
 )

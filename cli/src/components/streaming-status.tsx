@@ -8,13 +8,9 @@ interface StreamingStatusProps {
   tokenCount: number
 }
 
-// Braille spinner frames
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-
 export const StreamingStatus = ({ flavorWord, startTime, tokenCount }: StreamingStatusProps) => {
   const theme = useTheme()
   const [elapsed, setElapsed] = useState(0)
-  const [spinnerFrame, setSpinnerFrame] = useState(0)
 
   // Update elapsed time every second
   useEffect(() => {
@@ -23,14 +19,6 @@ export const StreamingStatus = ({ flavorWord, startTime, tokenCount }: Streaming
     }, 1000)
     return () => clearInterval(interval)
   }, [startTime])
-
-  // Animate spinner
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSpinnerFrame((prev) => (prev + 1) % SPINNER_FRAMES.length)
-    }, 150)
-    return () => clearInterval(interval)
-  }, [])
 
   // Format token count (1.4k, 2.3k, etc)
   const formatTokens = (count: number): string => {
@@ -42,7 +30,6 @@ export const StreamingStatus = ({ flavorWord, startTime, tokenCount }: Streaming
 
   return (
     <box style={{ flexDirection: 'row' }}>
-      <text style={{ fg: theme.accent }}>{SPINNER_FRAMES[spinnerFrame]} </text>
       <text>
         <ShimmerText text={flavorWord} primaryColor={theme.accent} interval={100} />
       </text>
