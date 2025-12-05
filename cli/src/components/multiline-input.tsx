@@ -238,6 +238,13 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
       renderCursorPosition += displayValue[i] === '\t' ? TAB_WIDTH : 1
     }
 
+    // Detect slash command: starts with "/" and ends at first space or end of string
+    const slashCommandEnd = (() => {
+      if (!value.startsWith('/')) return 0
+      const spaceIdx = value.indexOf(' ')
+      return spaceIdx === -1 ? value.length : spaceIdx
+    })()
+
     const { beforeCursor, afterCursor, activeChar, shouldHighlight } = (() => {
       if (!showCursor) {
         return {
@@ -617,7 +624,17 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
         >
           {showCursor ? (
             <>
-              {beforeCursor}
+              {/* Render beforeCursor with slash command highlighting */}
+              {slashCommandEnd > 0 && renderCursorPosition > 0 ? (
+                <>
+                  <span fg={theme.slashCommandFg}>
+                    {beforeCursor.slice(0, Math.min(slashCommandEnd, renderCursorPosition))}
+                  </span>
+                  {renderCursorPosition > slashCommandEnd && beforeCursor.slice(slashCommandEnd)}
+                </>
+              ) : (
+                beforeCursor
+              )}
               {shouldHighlight ? (
                 <span
                   bg={highlightBg}
@@ -631,18 +648,42 @@ export const MultilineInput = forwardRef<MultilineInputHandle, MultilineInputPro
                   visible={true}
                   focused={focused}
                   shouldBlink={effectiveShouldBlinkCursor}
-                  color={theme.info}
+                  color={theme.muted}
                   key={lastActivity}
                 />
               )}
-              {shouldHighlight
-                ? afterCursor.length > 0
-                  ? afterCursor.slice(1)
-                  : ''
-                : afterCursor}
+              {/* Render afterCursor with slash command highlighting */}
+              {(() => {
+                const textAfter = shouldHighlight
+                  ? afterCursor.length > 0
+                    ? afterCursor.slice(1)
+                    : ''
+                  : afterCursor
+                if (slashCommandEnd > renderCursorPosition && textAfter.length > 0) {
+                  const cmdRemaining = slashCommandEnd - renderCursorPosition - (shouldHighlight ? 1 : 0)
+                  if (cmdRemaining > 0) {
+                    return (
+                      <>
+                        <span fg={theme.slashCommandFg}>{textAfter.slice(0, cmdRemaining)}</span>
+                        {textAfter.slice(cmdRemaining)}
+                      </>
+                    )
+                  }
+                }
+                return textAfter
+              })()}
             </>
           ) : (
-            <>{displayValueForRendering}</>
+            <>
+              {slashCommandEnd > 0 ? (
+                <>
+                  <span fg={theme.slashCommandFg}>{displayValueForRendering.slice(0, slashCommandEnd)}</span>
+                  {displayValueForRendering.slice(slashCommandEnd)}
+                </>
+              ) : (
+                displayValueForRendering
+              )}
+            </>
           )}
         </text>
       </scrollbox>

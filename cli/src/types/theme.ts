@@ -17,6 +17,7 @@ export type ChatTheme = {
   inputFocusedFg: string
   inputBg: string
   inputBorder: string
+  slashCommandFg: string
 
   // Message colors
   userMessageBg: string
@@ -48,10 +49,11 @@ export const darkTheme: ChatTheme = {
   success: '#22c55e',
   info: '#06b6d4',
 
-  inputFg: '#e4e4e7',
-  inputFocusedFg: '#ffffff',
+  inputFg: '#808080',
+  inputFocusedFg: '#808080',
   inputBg: 'transparent',
   inputBorder: '#3f3f46',
+  slashCommandFg: '#ffffff',
 
   userMessageBg: '#1e3a5f',
   userMessageFg: '#e4e4e7',
@@ -79,10 +81,11 @@ export const lightTheme: ChatTheme = {
   success: '#16a34a',
   info: '#0891b2',
 
-  inputFg: '#18181b',
-  inputFocusedFg: '#000000',
+  inputFg: '#808080',
+  inputFocusedFg: '#808080',
   inputBg: 'transparent',
   inputBorder: '#d4d4d8',
+  slashCommandFg: '#18181b',
 
   userMessageBg: '#dbeafe',
   userMessageFg: '#18181b',

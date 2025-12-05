@@ -25,7 +25,7 @@ export const WelcomeBanner = ({
   const sidebarWidth = Math.max(20, Math.min(35, Math.floor(bannerWidth * 0.35)))
 
   // Top border with version aligned to sidebar center
-  const versionText = ` Sonder v${version} `
+  const versionText = `Sonder v${version}`
   const dashesBeforeText = Math.floor((sidebarWidth - versionText.length) / 2)
   const dashesAfterText = innerWidth - dashesBeforeText - versionText.length
 
@@ -47,7 +47,7 @@ export const WelcomeBanner = ({
     >
       {/* Top border with centered version */}
       <text style={{ fg: theme.borderColor }}>
-        ╭{'─'.repeat(dashesBeforeText)}<span fg={theme.accent}>Sonder</span> v{version}{'─'.repeat(dashesAfterText)}╮
+        ╭{'─'.repeat(dashesBeforeText)}Sonder v{version}{'─'.repeat(dashesAfterText)}╮
       </text>
 
       {/* Content row with side borders */}
@@ -69,7 +69,7 @@ export const WelcomeBanner = ({
             alignItems: 'center',
           }}
         >
-          <text style={{ fg: theme.accent }}>{SONDER_LOGO}</text>
+          <text style={{ fg: theme.muted }}>{SONDER_LOGO}</text>
           <text style={{ fg: theme.muted, marginTop: 1 }}>{modelInfo}</text>
           <text style={{ fg: theme.muted }}>{machineInfo}</text>
         </box>
@@ -92,7 +92,7 @@ export const WelcomeBanner = ({
             paddingBottom: 1,
           }}
         >
-          <text style={{ fg: theme.foreground }}>Messages</text>
+          <text style={{ fg: theme.muted }}>Messages</text>
           <text style={{ fg: theme.borderMuted, marginTop: 1 }}>
             {'─'.repeat(Math.max(10, innerWidth - sidebarWidth - 4))}
           </text>

@@ -60,7 +60,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
         {/* Middle: │ > input content                    │ */}
         <box style={{ flexDirection: 'row', width }}>
           <text style={{ fg: theme.borderColor }}>│ </text>
-          <text style={{ fg: theme.accent }}>{'>'} </text>
+          <text style={{ fg: theme.muted }}>{'>'} </text>
           <box style={{ flexGrow: 1 }}>
             <MultilineInput
               ref={inputRef}
@@ -81,7 +81,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
 
         {/* Bottom border with embedded status: ╰─── Sonder ─── stealth ─── ? for shortcuts ────╯ */}
         <text style={{ fg: theme.borderColor }}>
-          ╰{'─'.repeat(dashesBeforeText)} <span fg={theme.muted}>{model}</span> ─── <span fg={theme.accent}>{mode}</span> ─── <span fg={theme.muted}>? for shortcuts</span> {'─'.repeat(dashesAfterText)}╯
+          ╰{'─'.repeat(dashesBeforeText)} <span fg={theme.muted}>{model}</span> ─── <span fg={theme.muted}>{mode}</span> ─── <span fg={theme.muted}>? for shortcuts</span> {'─'.repeat(dashesAfterText)}╯
         </text>
       </box>
     )

@@ -12,6 +12,7 @@ import { streamChat, type Message } from './services/openrouter'
 import type { MultilineInputHandle } from './components/multiline-input'
 
 import type { KeyEvent, ScrollBoxRenderable } from '@opentui/core'
+import { yellow, fg, t } from '@opentui/core'
 
 interface AppProps {
   initialPrompt: string | null
@@ -26,6 +27,60 @@ const MODEL_IDS: Record<(typeof MODELS)[number], string> = {
 }
 const MODES = ['stealth', 'osint', 'semi-auto', 'kill'] as const
 
+// Command definitions for the command menu
+const COMMANDS = [
+  { name: '/add-dir', aliases: [], description: 'Add a new working directory' },
+  { name: '/agents', aliases: [], description: 'Manage agent configurations' },
+  { name: '/clear', aliases: ['reset', 'new'], description: 'Clear conversation history and free up context' },
+  { name: '/config', aliases: ['theme'], description: 'Open config panel' },
+  { name: '/context', aliases: [], description: 'Visualize current context usage as a colored grid' },
+  { name: '/doctor', aliases: [], description: 'Diagnose and verify your installation and settings' },
+  { name: '/exit', aliases: ['quit'], description: 'Exit the REPL' },
+  { name: '/login', aliases: ['logout'], description: 'Login or logout when already logged in' },
+] as const
+
+// Trie node for command prefix matching
+class TrieNode {
+  children: Map<string, TrieNode> = new Map()
+  commands: typeof COMMANDS[number][] = []
+}
+
+// Build trie from commands
+function buildCommandTrie(commands: typeof COMMANDS): TrieNode {
+  const root = new TrieNode()
+
+  for (const cmd of commands) {
+    let node = root
+    // Insert the command name (including the /)
+    for (const char of cmd.name.toLowerCase()) {
+      if (!node.children.has(char)) {
+        node.children.set(char, new TrieNode())
+      }
+      node = node.children.get(char)!
+      node.commands.push(cmd)
+    }
+  }
+
+  return root
+}
+
+const commandTrie = buildCommandTrie(COMMANDS)
+
+// Search trie for commands matching a prefix
+function searchCommands(prefix: string): typeof COMMANDS[number][] {
+  let node = commandTrie
+  const lowerPrefix = prefix.toLowerCase()
+
+  for (const char of lowerPrefix) {
+    if (!node.children.has(char)) {
+      return []
+    }
+    node = node.children.get(char)!
+  }
+
+  return node.commands
+}
+
 export const App = ({ initialPrompt }: AppProps) => {
   const theme = useTheme()
   const { terminalWidth, terminalHeight } = useTerminalDimensions()
@@ -36,6 +91,7 @@ export const App = ({ initialPrompt }: AppProps) => {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCommands, setShowCommands] = useState(false)
   const [showContext, setShowContext] = useState(false)
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
 
   const {
     messages,
@@ -170,12 +226,43 @@ export const App = ({ initialPrompt }: AppProps) => {
         setShowShortcuts(false)
         setShowContext(false)
         setShowCommands(true)
+        setSelectedCommandIndex(0)
         return false // let it type the /
       }
-      // Backspace: close commands panel if input is just "/"
-      if (key.name === 'backspace' && inputValue === '/' && showCommands) {
+      // Arrow keys: navigate command menu
+      if (showCommands && (key.name === 'up' || key.name === 'down')) {
+        const filtered = searchCommands(inputValue)
+        if (filtered.length > 0) {
+          if (key.name === 'up') {
+            setSelectedCommandIndex((prev) => (prev - 1 + filtered.length) % filtered.length)
+          } else {
+            setSelectedCommandIndex((prev) => (prev + 1) % filtered.length)
+          }
+        }
+        return true // consume the key
+      }
+      // Tab or Enter: autocomplete selected command
+      if (showCommands && (key.name === 'tab' || key.name === 'return' || key.name === 'enter')) {
+        const filtered = searchCommands(inputValue)
+        if (filtered.length > 0) {
+          const selected = filtered[selectedCommandIndex] ?? filtered[0]
+          setInputValue({ text: selected.name + ' ', cursorPosition: selected.name.length + 1, lastEditDueToNav: false })
+          setShowCommands(false)
+          setSelectedCommandIndex(0)
+        }
+        return true // consume the key
+      }
+      // Space: close commands panel (command is complete)
+      if (key.sequence === ' ' && showCommands) {
         setShowCommands(false)
-        return false // let it delete the /
+        return false // let it type the space
+      }
+      // Backspace: close commands panel if input will no longer start with /
+      if (key.name === 'backspace' && showCommands) {
+        if (inputValue === '/' || !inputValue.startsWith('/')) {
+          setShowCommands(false)
+        }
+        return false // let it delete the character
       }
       // Escape: close panels
       if (key.name === 'escape' && (showShortcuts || showCommands || showContext)) {
@@ -186,7 +273,7 @@ export const App = ({ initialPrompt }: AppProps) => {
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, inputValue],
+    [showShortcuts, showCommands, showContext, inputValue, selectedCommandIndex],
   )
 
   // Global keyboard handler for Ctrl+C and backspace to close panels
@@ -215,6 +302,16 @@ export const App = ({ initialPrompt }: AppProps) => {
       handleSendMessage(initialPrompt)
     }
   }, [])
+
+  // Reset selected command index when input changes (to keep it in valid range)
+  useEffect(() => {
+    if (showCommands) {
+      const filtered = searchCommands(inputValue)
+      if (selectedCommandIndex >= filtered.length) {
+        setSelectedCommandIndex(Math.max(0, filtered.length - 1))
+      }
+    }
+  }, [inputValue, showCommands, selectedCommandIndex])
 
   // Layout calculations
   const sidebarWidth = Math.max(20, Math.floor(terminalWidth * 0.25))
@@ -265,10 +362,10 @@ export const App = ({ initialPrompt }: AppProps) => {
           {/* Messages */}
           {messages.map((msg) => (
             <box key={msg.id} style={{ marginBottom: 1 }}>
-              <text style={{ fg: msg.variant === 'user' ? theme.accent : theme.foreground, wrapMode: 'word' }}>
+              <text style={{ fg: theme.muted, wrapMode: 'word' }}>
                 {msg.variant === 'user' ? '> ' : ''}
                 {msg.isStreaming && !msg.content ? (
-                  <ShimmerText text="Thinking..." primaryColor={theme.info} interval={120} />
+                  <ShimmerText text="Thinking..." primaryColor="#808080" interval={120} />
                 ) : (
                   <>
                     {msg.content}
@@ -318,28 +415,35 @@ export const App = ({ initialPrompt }: AppProps) => {
           )}
 
           {/* Commands panel - shown below input when / is pressed */}
-          {showCommands && (
-            <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
-              <text style={{ fg: theme.accent }}>/add-dir</text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Add a new working directory</text>
-              <text style={{ fg: theme.accent }}>/agents</text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Manage agent configurations</text>
-              <text style={{ fg: theme.accent }}>/clear <span fg={theme.muted}>(reset, new)</span></text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Clear conversation history and free up context</text>
-              <text style={{ fg: theme.accent }}>/compact</text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Clear conversation history but keep a summary</text>
-              <text style={{ fg: theme.accent }}>/config <span fg={theme.muted}>(theme)</span></text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Open config panel</text>
-              <text style={{ fg: theme.accent }}>/context</text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Visualize current context usage as a colored grid</text>
-              <text style={{ fg: theme.accent }}>/doctor</text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Diagnose and verify your installation and settings</text>
-              <text style={{ fg: theme.accent }}>/exit <span fg={theme.muted}>(quit)</span></text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Exit the REPL</text>
-              <text style={{ fg: theme.accent }}>/login <span fg={theme.muted}>(logout)</span></text>
-              <text style={{ fg: theme.muted, marginLeft: 2 }}>Login or logout when already logged in</text>
-            </box>
-          )}
+          {showCommands && (() => {
+            const filteredCommands = searchCommands(inputValue)
+            if (filteredCommands.length === 0) return null
+            // Clamp selected index to valid range
+            const clampedIndex = Math.min(selectedCommandIndex, filteredCommands.length - 1)
+            return (
+              <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
+                {filteredCommands.map((cmd, idx) => {
+                  const isSelected = idx === clampedIndex
+                  return (
+                    <box key={cmd.name} style={{ flexDirection: 'column' }}>
+                      <text style={{ fg: theme.slashCommandFg }}>
+                        {isSelected ? (
+                          <ShimmerText
+                            text={cmd.name}
+                            primaryColor={theme.slashCommandFg}
+                            interval={80}
+                          />
+                        ) : (
+                          cmd.name
+                        )}
+                      </text>
+                      <text style={{ fg: theme.muted, marginLeft: 2 }}>{cmd.description}</text>
+                    </box>
+                  )
+                })}
+              </box>
+            )
+          })()}
 
           {/* Context panel - shown below input when * is pressed */}
           {showContext && (
@@ -380,9 +484,7 @@ export const App = ({ initialPrompt }: AppProps) => {
           flexDirection: 'column',
         }}
       >
-        <text style={{ fg: theme.warning }}>
-          {'-->|'} <span fg={theme.muted}>/init to start</span>
-        </text>
+        <text content={t`${yellow('-->|')}`} /><text style={{ fg: theme.muted }}> /init to start</text>
         <text style={{ fg: theme.muted, marginTop: 1 }}>Plan</text>
       </box>
     </box>
