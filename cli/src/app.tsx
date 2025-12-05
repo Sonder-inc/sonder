@@ -8,7 +8,8 @@ import { useChatStore } from './state/chat-store'
 import { InputBox } from './components/input-box'
 import { WelcomeBanner } from './components/welcome-banner'
 import { ShimmerText } from './components/shimmer-text'
-import { streamChat, type Message } from './services/openrouter'
+import { StreamingStatus } from './components/streaming-status'
+import { streamChat, getFlavorWord, type Message } from './services/openrouter'
 import type { MultilineInputHandle } from './components/multiline-input'
 
 import type { KeyEvent, ScrollBoxRenderable } from '@opentui/core'
@@ -37,6 +38,7 @@ const COMMANDS = [
   { name: '/doctor', aliases: [], description: 'Diagnose and verify your installation and settings' },
   { name: '/exit', aliases: ['quit'], description: 'Exit the REPL' },
   { name: '/login', aliases: ['logout'], description: 'Login or logout when already logged in' },
+  { name: '/school', aliases: [], description: 'Hacking playground to rank up' },
 ] as const
 
 // Thread/context menu items
@@ -115,6 +117,13 @@ export const App = ({ initialPrompt }: AppProps) => {
   const [pendingExit, setPendingExit] = useState(false)
   const pendingExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Streaming status state
+  const [flavorWord, setFlavorWord] = useState('')
+  const [showStatus, setShowStatus] = useState(false)
+  const [streamStartTime, setStreamStartTime] = useState(0)
+  const [tokenCount, setTokenCount] = useState(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   const {
     messages,
     addMessage,
@@ -166,8 +175,25 @@ export const App = ({ initialPrompt }: AppProps) => {
         isStreaming: true,
       })
 
+      // Setup streaming state
       setIsStreaming(true)
       setStreamingMessageId(aiMessageId)
+      setStreamStartTime(Date.now())
+      setTokenCount(0)
+      setShowStatus(false)
+      setFlavorWord('')
+
+      // Create abort controller for cancellation
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
+
+      // Get flavor word from Haiku - only show status once we have it
+      getFlavorWord(content).then((word) => {
+        if (word) {
+          setFlavorWord(word)
+          setShowStatus(true)
+        }
+      })
 
       try {
         // Build message history for context (only completed messages)
@@ -183,21 +209,33 @@ export const App = ({ initialPrompt }: AppProps) => {
 
         await streamChat(
           chatMessages,
-          (chunk) => appendToStreamingMessage(chunk),
+          (chunk, tokens) => {
+            appendToStreamingMessage(chunk)
+            setTokenCount(tokens)
+          },
           MODEL_IDS[MODELS[modelIndex]],
+          abortController.signal,
         )
         updateMessage(aiMessageId, { isComplete: true, isStreaming: false })
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error)
-        updateMessage(aiMessageId, {
-          content: `Error: ${errorMsg}`,
-          variant: 'error',
-          isComplete: true,
-          isStreaming: false,
-        })
+        if (abortController.signal.aborted) {
+          // User cancelled - mark as complete with current content
+          updateMessage(aiMessageId, { isComplete: true, isStreaming: false })
+        } else {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          updateMessage(aiMessageId, {
+            content: `Error: ${errorMsg}`,
+            variant: 'error',
+            isComplete: true,
+            isStreaming: false,
+          })
+        }
       } finally {
         setIsStreaming(false)
         setStreamingMessageId(null)
+        abortControllerRef.current = null
+        setShowStatus(false)
+        setFlavorWord('')
       }
     },
     [messages, addMessage, updateMessage, appendToStreamingMessage, setIsStreaming, setStreamingMessageId, modelIndex],
@@ -283,8 +321,13 @@ export const App = ({ initialPrompt }: AppProps) => {
           setSelectedMenuIndex(0)
           handleSendMessage(selected.name)
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return true // consume the key only when we matched a command
         }
-        return true // consume the key
+        // No matches - close menus and let normal submit handle it
+        setShowCommands(false)
+        setShowContext(false)
+        setSelectedMenuIndex(0)
+        return false
       }
       // Space: close menu panels (item is complete)
       if (key.sequence === ' ' && (showCommands || showContext)) {
@@ -312,11 +355,23 @@ export const App = ({ initialPrompt }: AppProps) => {
     [showShortcuts, showCommands, showContext, inputValue, selectedMenuIndex, handleSendMessage],
   )
 
-  // Global keyboard handler for Ctrl+C and backspace to close panels
+  // Global keyboard handler for Ctrl+C, Escape, and backspace
   useKeyboard(
     useCallback(
       (key: KeyEvent) => {
+        // Escape: cancel streaming if active
+        if (key.name === 'escape' && isStreaming && abortControllerRef.current) {
+          abortControllerRef.current.abort()
+          return
+        }
+
         if (key.ctrl && key.name === 'c') {
+          // Ctrl+C while streaming: cancel the stream
+          if (isStreaming && abortControllerRef.current) {
+            abortControllerRef.current.abort()
+            return
+          }
+
           if (inputValue.length > 0) {
             // Clear input and reset pending exit
             setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
@@ -355,7 +410,7 @@ export const App = ({ initialPrompt }: AppProps) => {
           }
         }
       },
-      [inputValue, setInputValue, showShortcuts, showContext, pendingExit],
+      [inputValue, setInputValue, showShortcuts, showContext, pendingExit, isStreaming],
     ),
   )
 
@@ -424,20 +479,30 @@ export const App = ({ initialPrompt }: AppProps) => {
           {/* Messages */}
           {messages.map((msg) => (
             <box key={msg.id} style={{ marginBottom: 1 }}>
-              <text style={{ fg: theme.muted, wrapMode: 'word' }}>
-                {msg.variant === 'user' ? '> ' : ''}
-                {msg.isStreaming && !msg.content ? (
-                  <ShimmerText text="Thinking..." primaryColor="#808080" interval={120} />
-                ) : (
-                  <>
-                    {msg.content}
-                    {msg.isStreaming ? '▌' : ''}
-                  </>
-                )}
-              </text>
+              {msg.variant === 'user' ? (
+                <text style={{ fg: '#ffffff', bg: '#3f3f46', bold: true, wrapMode: 'word' }}>
+                  {' '}{msg.content}{' '}
+                </text>
+              ) : (
+                <text style={{ fg: theme.muted, wrapMode: 'word' }}>
+                  {msg.content}
+                  {msg.isStreaming && msg.content ? '▌' : ''}
+                </text>
+              )}
             </box>
           ))}
         </scrollbox>
+
+        {/* Streaming status - always reserves space, content shown when ready */}
+        <box style={{ marginLeft: 2, height: isStreaming ? 2 : 0 }}>
+          {isStreaming && showStatus && flavorWord && (
+            <StreamingStatus
+              flavorWord={flavorWord}
+              startTime={streamStartTime}
+              tokenCount={tokenCount}
+            />
+          )}
+        </box>
 
         {/* Input box */}
         <box style={{ flexDirection: 'column', flexShrink: 0, marginLeft: 1, marginRight: 1, marginBottom: 1 }}>
