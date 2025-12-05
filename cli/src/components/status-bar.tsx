@@ -1,4 +1,5 @@
 import { useTheme } from '../hooks/use-theme'
+import { ShimmerText } from './shimmer-text'
 
 interface StatusBarProps {
   isStreaming?: boolean
@@ -17,24 +18,23 @@ export const StatusBar = ({
     if (statusMessage) {
       return statusMessage
     }
-    if (isStreaming) {
-      return 'Thinking...'
-    }
     if (!isConnected) {
       return 'Disconnected'
     }
-    return 'Ready'
+    if (!isStreaming) {
+      return 'Ready'
+    }
+    return null // Will render ShimmerText instead
   }
 
   const getStatusColor = () => {
     if (!isConnected) {
       return theme.error
     }
-    if (isStreaming) {
-      return theme.warning
-    }
     return theme.muted
   }
+
+  const statusText = getStatusText()
 
   return (
     <box
@@ -46,7 +46,13 @@ export const StatusBar = ({
         height: 1,
       }}
     >
-      <text style={{ fg: getStatusColor() }}>{getStatusText()}</text>
+      {statusText ? (
+        <text style={{ fg: getStatusColor() }}>{statusText}</text>
+      ) : (
+        <text>
+          <ShimmerText text="Thinking..." primaryColor={theme.warning} />
+        </text>
+      )}
       <text style={{ fg: theme.muted }}>Sonder v0.1.0</text>
     </box>
   )

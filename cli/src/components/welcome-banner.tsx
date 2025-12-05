@@ -1,36 +1,33 @@
 import { useTheme } from '../hooks/use-theme'
-import { useTerminalDimensions } from '../hooks/use-terminal-dimensions'
 
-// Sonder logo - cute crab placeholder
-const SONDER_LOGO = `
-    ▗ ▗   ▖ ▖
-
-      ▘▘ ▝▝
-`.trim()
+const SONDER_LOGO = `▐▛███▜▌
+▜█████▛
+ ▘▘ ▝▝  `
 
 interface WelcomeBannerProps {
+  width: number
   version?: string
   machineInfo?: string
   modelInfo?: string
 }
 
 export const WelcomeBanner = ({
+  width,
   version = '0.1.08',
   machineInfo = 'home/hacks',
   modelInfo = 'DSv3.2 - pro',
 }: WelcomeBannerProps) => {
   const theme = useTheme()
-  const { terminalWidth } = useTerminalDimensions()
 
-  // Calculate widths
-  const bannerWidth = terminalWidth - 4 // Account for scrollbox padding
+  // Calculate widths - use provided width to match input bar
+  const bannerWidth = width
   const innerWidth = bannerWidth - 2 // Minus left and right border chars
   const sidebarWidth = Math.max(20, Math.min(35, Math.floor(bannerWidth * 0.35)))
 
-  // Top border with embedded version
-  const versionText = `Sonder v${version}`
-  const dashesBeforeText = 3
-  const dashesAfterText = Math.max(0, innerWidth - dashesBeforeText - versionText.length - 2)
+  // Top border with version aligned to sidebar center
+  const versionText = ` Sonder v${version} `
+  const dashesBeforeText = Math.floor((sidebarWidth - versionText.length) / 2)
+  const dashesAfterText = innerWidth - dashesBeforeText - versionText.length
 
   // Count actual lines (logo has multiple lines)
   const logoLines = SONDER_LOGO.split('\n').length
@@ -48,9 +45,9 @@ export const WelcomeBanner = ({
         width: bannerWidth,
       }}
     >
-      {/* Top border with embedded version: ╭─── Sonder v0.1.08 ──────────────╮ */}
+      {/* Top border with centered version */}
       <text style={{ fg: theme.borderColor }}>
-        ╭{'─'.repeat(dashesBeforeText)} <span fg={theme.accent}>Sonder</span> v{version} {'─'.repeat(dashesAfterText)}╮
+        ╭{'─'.repeat(dashesBeforeText)}<span fg={theme.accent}>Sonder</span> v{version}{'─'.repeat(dashesAfterText)}╮
       </text>
 
       {/* Content row with side borders */}
@@ -67,10 +64,9 @@ export const WelcomeBanner = ({
           style={{
             flexDirection: 'column',
             width: sidebarWidth - 2,
-            paddingLeft: 1,
-            paddingRight: 1,
             paddingTop: 1,
             paddingBottom: 1,
+            alignItems: 'center',
           }}
         >
           <text style={{ fg: theme.accent }}>{SONDER_LOGO}</text>

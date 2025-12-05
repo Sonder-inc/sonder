@@ -3,6 +3,7 @@ import { forwardRef, useRef } from 'react'
 import { MultilineInput, type MultilineInputHandle } from './multiline-input'
 import { useTheme } from '../hooks/use-theme'
 import type { InputValue } from '../state/chat-store'
+import type { KeyEvent } from '@opentui/core'
 
 interface InputBoxProps {
   inputValue: string
@@ -13,6 +14,7 @@ interface InputBoxProps {
   width: number
   model?: string
   mode?: string
+  onKeyIntercept?: (key: KeyEvent) => boolean
 }
 
 export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
@@ -26,6 +28,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
       width,
       model = 'Sonder',
       mode = 'stealth',
+      onKeyIntercept,
     },
     ref,
   ) {
@@ -70,6 +73,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
               width={innerWidth - 4}
               maxHeight={5}
               minHeight={1}
+              onKeyIntercept={onKeyIntercept}
             />
           </box>
           <text style={{ fg: theme.borderColor }}> │</text>

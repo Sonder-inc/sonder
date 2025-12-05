@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useKeyboard } from '@opentui/react'
 
@@ -7,6 +7,8 @@ import { useTerminalDimensions } from './hooks/use-terminal-dimensions'
 import { useChatStore } from './state/chat-store'
 import { InputBox } from './components/input-box'
 import { WelcomeBanner } from './components/welcome-banner'
+import { ShimmerText } from './components/shimmer-text'
+import { streamChat, type Message } from './services/openrouter'
 import type { MultilineInputHandle } from './components/multiline-input'
 
 import type { KeyEvent, ScrollBoxRenderable } from '@opentui/core'
@@ -15,16 +17,31 @@ interface AppProps {
   initialPrompt: string | null
 }
 
+const MODELS = ['Sonder', 'Opus 4.5', 'GPT5', 'G3 Pro'] as const
+const MODEL_IDS: Record<(typeof MODELS)[number], string> = {
+  Sonder: 'anthropic/claude-3.7-sonnet:thinking',
+  'Opus 4.5': 'anthropic/claude-opus-4.5',
+  GPT5: 'openai/gpt-5.1',
+  'G3 Pro': 'google/gemini-3-pro-preview',
+}
+const MODES = ['stealth', 'osint', 'semi-auto', 'kill'] as const
+
 export const App = ({ initialPrompt }: AppProps) => {
   const theme = useTheme()
   const { terminalWidth, terminalHeight } = useTerminalDimensions()
   const scrollRef = useRef<ScrollBoxRenderable | null>(null)
   const inputRef = useRef<MultilineInputHandle | null>(null)
+  const [modelIndex, setModelIndex] = useState(0)
+  const [modeIndex, setModeIndex] = useState(0)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showCommands, setShowCommands] = useState(false)
+  const [showContext, setShowContext] = useState(false)
 
   const {
     messages,
     addMessage,
     updateMessage,
+    appendToStreamingMessage,
     inputValue,
     cursorPosition,
     setInputValue,
@@ -37,6 +54,7 @@ export const App = ({ initialPrompt }: AppProps) => {
       messages: store.messages,
       addMessage: store.addMessage,
       updateMessage: store.updateMessage,
+      appendToStreamingMessage: store.appendToStreamingMessage,
       inputValue: store.inputValue,
       cursorPosition: store.cursorPosition,
       setInputValue: store.setInputValue,
@@ -74,15 +92,27 @@ export const App = ({ initialPrompt }: AppProps) => {
       setStreamingMessageId(aiMessageId)
 
       try {
-        const response = `Received: "${content}"\n\nThis is a placeholder. Connect to your AI backend!`
-        for (let i = 0; i < response.length; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 15))
-          updateMessage(aiMessageId, { content: response.slice(0, i + 1) })
-        }
+        // Build message history for context (only completed messages)
+        const chatMessages: Message[] = [
+          ...messages
+            .filter((msg) => msg.isComplete && msg.variant !== 'error')
+            .map((msg) => ({
+              role: (msg.variant === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+              content: msg.content,
+            })),
+          { role: 'user' as const, content },
+        ]
+
+        await streamChat(
+          chatMessages,
+          (chunk) => appendToStreamingMessage(chunk),
+          MODEL_IDS[MODELS[modelIndex]],
+        )
         updateMessage(aiMessageId, { isComplete: true, isStreaming: false })
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
         updateMessage(aiMessageId, {
-          content: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
+          content: `Error: ${errorMsg}`,
           variant: 'error',
           isComplete: true,
           isStreaming: false,
@@ -92,7 +122,7 @@ export const App = ({ initialPrompt }: AppProps) => {
         setStreamingMessageId(null)
       }
     },
-    [addMessage, updateMessage, setIsStreaming, setStreamingMessageId],
+    [messages, addMessage, updateMessage, appendToStreamingMessage, setIsStreaming, setStreamingMessageId, modelIndex],
   )
 
   const handleSubmit = useCallback(() => {
@@ -102,7 +132,64 @@ export const App = ({ initialPrompt }: AppProps) => {
     setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
   }, [inputValue, isStreaming, handleSendMessage, setInputValue])
 
-  // Ctrl+C handler
+  // Key intercept for input - handles Shift+M before input processes it
+  const handleKeyIntercept = useCallback(
+    (key: KeyEvent): boolean => {
+      // Shift+M: cycle through modes
+      if (key.shift && key.name === 'm') {
+        setModeIndex((prev) => (prev + 1) % MODES.length)
+        return true // handled, don't process further
+      }
+      // Shift+Tab: cycle through models
+      if (key.shift && key.name === 'tab') {
+        setModelIndex((prev) => (prev + 1) % MODELS.length)
+        return true
+      }
+      // ?: toggle shortcuts panel (only if not showing commands)
+      if (key.sequence === '?') {
+        if (showCommands) {
+          // do nothing if commands panel is open
+          return true
+        }
+        setShowContext(false)
+        setShowShortcuts((prev) => !prev)
+        return true
+      }
+      // Shift+* (asterisk): toggle context panel
+      if (key.sequence === '*') {
+        if (showCommands) {
+          // do nothing if commands panel is open
+          return true
+        }
+        setShowShortcuts(false)
+        setShowContext((prev) => !prev)
+        return true
+      }
+      // /: show commands panel, exit shortcuts/context if open
+      if (key.sequence === '/' && inputValue.length === 0) {
+        setShowShortcuts(false)
+        setShowContext(false)
+        setShowCommands(true)
+        return false // let it type the /
+      }
+      // Backspace: close commands panel if input is just "/"
+      if (key.name === 'backspace' && inputValue === '/' && showCommands) {
+        setShowCommands(false)
+        return false // let it delete the /
+      }
+      // Escape: close panels
+      if (key.name === 'escape' && (showShortcuts || showCommands || showContext)) {
+        setShowShortcuts(false)
+        setShowCommands(false)
+        setShowContext(false)
+        return true
+      }
+      return false // not handled, let input process it
+    },
+    [showShortcuts, showCommands, showContext, inputValue],
+  )
+
+  // Global keyboard handler for Ctrl+C and backspace to close panels
   useKeyboard(
     useCallback(
       (key: KeyEvent) => {
@@ -113,8 +200,13 @@ export const App = ({ initialPrompt }: AppProps) => {
             setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           }
         }
+        // Backspace closes shortcuts/context panels when input is empty
+        if (key.name === 'backspace' && inputValue.length === 0 && (showShortcuts || showContext)) {
+          setShowShortcuts(false)
+          setShowContext(false)
+        }
       },
-      [inputValue, setInputValue],
+      [inputValue, setInputValue, showShortcuts, showContext],
     ),
   )
 
@@ -129,87 +221,169 @@ export const App = ({ initialPrompt }: AppProps) => {
   const mainWidth = terminalWidth - sidebarWidth - 3
 
   return (
-    <box style={{ flexDirection: 'column', flexGrow: 1, gap: 0 }}>
-      {/* Messages scrollbox - banner is inside and scrolls with messages */}
-      <scrollbox
-        ref={scrollRef}
-        stickyScroll
-        stickyStart="bottom"
-        scrollX={false}
-        scrollbarOptions={{ visible: false }}
-        style={{
-          flexGrow: 1,
-          rootOptions: {
-            flexGrow: 1,
-            padding: 0,
-            gap: 0,
-            flexDirection: 'row',
-            shouldFill: true,
-            backgroundColor: 'transparent',
-          },
-          wrapperOptions: {
-            flexGrow: 1,
-            border: false,
-            shouldFill: true,
-            backgroundColor: 'transparent',
-            flexDirection: 'column',
-          },
-          contentOptions: {
-            flexDirection: 'column',
-            gap: 0,
-            shouldFill: true,
-            justifyContent: 'flex-end',
-            backgroundColor: 'transparent',
-            paddingLeft: 1,
-            paddingRight: 1,
-          },
-        }}
-      >
-        {/* Banner - scrolls with chat */}
-        <WelcomeBanner />
-
-        {/* Messages */}
-        {messages.map((msg) => (
-          <box key={msg.id} style={{ marginBottom: 1 }}>
-            <text style={{ fg: msg.variant === 'user' ? theme.accent : theme.foreground, wrapMode: 'word' }}>
-              {msg.variant === 'user' ? '> ' : ''}
-              {msg.content}
-              {msg.isStreaming ? '▌' : ''}
-            </text>
-          </box>
-        ))}
-      </scrollbox>
-
-      {/* Bottom row: Input box + Sidebar */}
-      <box style={{ flexDirection: 'row', flexShrink: 0, marginLeft: 1, marginRight: 1, marginBottom: 1 }}>
-        {/* Input box */}
-        <InputBox
-          ref={inputRef}
-          inputValue={inputValue}
-          cursorPosition={cursorPosition}
-          setInputValue={setInputValue}
-          onSubmit={handleSubmit}
-          focused={inputFocused && !isStreaming}
-          width={mainWidth}
-          model="Sonder"
-          mode="stealth"
-        />
-
-        {/* Sidebar */}
-        <box
+    <box style={{ flexDirection: 'row', flexGrow: 1, gap: 0 }}>
+      {/* Main content column (scrollbox + input) */}
+      <box style={{ flexDirection: 'column', flexGrow: 1, width: mainWidth + 2 }}>
+        {/* Messages scrollbox - banner is inside and scrolls with messages */}
+        <scrollbox
+          ref={scrollRef}
+          stickyScroll
+          stickyStart="bottom"
+          scrollX={false}
+          scrollbarOptions={{ visible: false }}
           style={{
-            width: sidebarWidth,
-            borderStyle: 'single',
-            borderColor: theme.borderMuted,
-            marginLeft: 1,
-            padding: 1,
+            flexGrow: 1,
+            rootOptions: {
+              flexGrow: 1,
+              padding: 0,
+              gap: 0,
+              flexDirection: 'row',
+              shouldFill: true,
+              backgroundColor: 'transparent',
+            },
+            wrapperOptions: {
+              flexGrow: 1,
+              border: false,
+              shouldFill: true,
+              backgroundColor: 'transparent',
+              flexDirection: 'column',
+            },
+            contentOptions: {
+              flexDirection: 'column',
+              gap: 0,
+              shouldFill: true,
+              justifyContent: 'flex-end',
+              backgroundColor: 'transparent',
+              paddingLeft: 1,
+              paddingRight: 1,
+            },
           }}
         >
-          <text style={{ fg: theme.warning }}>
-            {'-->|'} <span fg={theme.muted}>/init to start</span>
-          </text>
-          <text style={{ fg: theme.muted, marginTop: 1 }}>Plan</text>
+          {/* Banner - scrolls with chat */}
+          <WelcomeBanner width={mainWidth} />
+
+          {/* Messages */}
+          {messages.map((msg) => (
+            <box key={msg.id} style={{ marginBottom: 1 }}>
+              <text style={{ fg: msg.variant === 'user' ? theme.accent : theme.foreground, wrapMode: 'word' }}>
+                {msg.variant === 'user' ? '> ' : ''}
+                {msg.isStreaming && !msg.content ? (
+                  <ShimmerText text="Thinking..." primaryColor={theme.info} interval={120} />
+                ) : (
+                  <>
+                    {msg.content}
+                    {msg.isStreaming ? '▌' : ''}
+                  </>
+                )}
+              </text>
+            </box>
+          ))}
+        </scrollbox>
+
+        {/* Input box */}
+        <box style={{ flexDirection: 'column', flexShrink: 0, marginLeft: 1, marginRight: 1, marginBottom: 1 }}>
+          <InputBox
+            ref={inputRef}
+            inputValue={inputValue}
+            cursorPosition={cursorPosition}
+            setInputValue={setInputValue}
+            onSubmit={handleSubmit}
+            focused={inputFocused && !isStreaming}
+            width={mainWidth}
+            model={MODELS[modelIndex]}
+            mode={MODES[modeIndex]}
+            onKeyIntercept={handleKeyIntercept}
+          />
+
+          {/* Shortcuts panel - shown below input when ? is pressed */}
+          {showShortcuts && (
+            <box style={{ flexDirection: 'row', marginLeft: 1, marginTop: 1, gap: 2 }}>
+              <box style={{ flexDirection: 'column' }}>
+                <text style={{ fg: theme.muted }}>/ for commands</text>
+                <text style={{ fg: theme.muted }}>@ for file paths</text>
+                <text style={{ fg: theme.muted }}># to memorize</text>
+                <text style={{ fg: theme.muted }}>* threads</text>
+              </box>
+              <box style={{ flexDirection: 'column' }}>
+                <text style={{ fg: theme.muted }}>⇧tab switch models</text>
+                <text style={{ fg: theme.muted }}>⇧m switch modes</text>
+                <text style={{ fg: theme.muted }}>esc to cancel</text>
+              </box>
+              <box style={{ flexDirection: 'column' }}>
+                <text style={{ fg: theme.muted }}>ctrl+c exit</text>
+                <text style={{ fg: theme.muted }}>⇧↵ for newline</text>
+                <text style={{ fg: theme.muted }}>ctrl+v paste</text>
+              </box>
+            </box>
+          )}
+
+          {/* Commands panel - shown below input when / is pressed */}
+          {showCommands && (
+            <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
+              <text style={{ fg: theme.accent }}>/add-dir</text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Add a new working directory</text>
+              <text style={{ fg: theme.accent }}>/agents</text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Manage agent configurations</text>
+              <text style={{ fg: theme.accent }}>/clear <span fg={theme.muted}>(reset, new)</span></text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Clear conversation history and free up context</text>
+              <text style={{ fg: theme.accent }}>/compact</text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Clear conversation history but keep a summary</text>
+              <text style={{ fg: theme.accent }}>/config <span fg={theme.muted}>(theme)</span></text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Open config panel</text>
+              <text style={{ fg: theme.accent }}>/context</text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Visualize current context usage as a colored grid</text>
+              <text style={{ fg: theme.accent }}>/doctor</text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Diagnose and verify your installation and settings</text>
+              <text style={{ fg: theme.accent }}>/exit <span fg={theme.muted}>(quit)</span></text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Exit the REPL</text>
+              <text style={{ fg: theme.accent }}>/login <span fg={theme.muted}>(logout)</span></text>
+              <text style={{ fg: theme.muted, marginLeft: 2 }}>Login or logout when already logged in</text>
+            </box>
+          )}
+
+          {/* Context panel - shown below input when * is pressed */}
+          {showContext && (
+            <box style={{ flexDirection: 'row', marginLeft: 1, marginTop: 1, gap: 2 }}>
+              <box style={{ flexDirection: 'column' }}>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>switch</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>new</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>handoff</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>fork</span></text>
+              </box>
+              <box style={{ flexDirection: 'column' }}>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>switch to previous</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>switch to parent</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>set visibility</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>share with support</span></text>
+              </box>
+              <box style={{ flexDirection: 'column' }}>
+                <text style={{ fg: theme.muted }}>prompt  <span fg={theme.foreground}>open in editor</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>open in browser</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>copy url</span></text>
+                <text style={{ fg: theme.muted }}>thread  <span fg={theme.foreground}>toggle thinking</span></text>
+              </box>
+            </box>
+          )}
         </box>
+      </box>
+
+      {/* Sidebar - full height */}
+      <box
+        style={{
+          width: sidebarWidth,
+          borderStyle: 'single',
+          borderColor: theme.borderMuted,
+          marginRight: 1,
+          marginTop: 1,
+          marginBottom: 1,
+          padding: 1,
+          flexDirection: 'column',
+        }}
+      >
+        <text style={{ fg: theme.warning }}>
+          {'-->|'} <span fg={theme.muted}>/init to start</span>
+        </text>
+        <text style={{ fg: theme.muted, marginTop: 1 }}>Plan</text>
       </box>
     </box>
   )

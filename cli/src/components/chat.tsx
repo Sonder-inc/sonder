@@ -115,7 +115,7 @@ export const Chat = ({ onSendMessage }: ChatProps) => {
         }}
       >
         {/* Welcome banner at top */}
-        <WelcomeBanner />
+        <WelcomeBanner width={inputWidth} />
 
         {/* Messages area */}
         <box
