@@ -62,7 +62,7 @@ export const StreamingStatus = ({ flavorWord, startTime, tokenCount }: Streaming
         <text style={{ fg: theme.muted }}>
           {hasPlan
             ? ' (esc to interrupt)'
-            : ` (esc to interrupt - ${elapsed}s - ${formatTokens(tokenCount)} tokens)`
+            : ` (esc to interrupt ${elapsed}s ${tokenCount > 0 ? '↓' : '↑'}${formatTokens(tokenCount)}toks)`
           }
         </text>
       </box>
@@ -80,10 +80,10 @@ export const StreamingStatus = ({ flavorWord, startTime, tokenCount }: Streaming
           <box key={item.id} style={{ height: 1 }}>
             <text>
               <span fg={theme.muted}>{`  ${prefix} `}</span>
-              <span fg={isCompleted ? theme.muted : (isInProgress ? theme.textPrimary : theme.muted)}>
+              <span fg={isCompleted ? theme.muted : (isInProgress ? theme.foreground : theme.muted)}>
                 {checkbox}
               </span>
-              <span fg={isCompleted ? theme.muted : (isInProgress ? theme.textPrimary : theme.muted)}>
+              <span fg={isCompleted ? theme.muted : (isInProgress ? theme.foreground : theme.muted)}>
                 {` ${content}`}
               </span>
             </text>

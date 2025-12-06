@@ -1,5 +1,7 @@
 export type ChatVariant = 'user' | 'ai' | 'system' | 'error'
 
+export type FeedbackValue = 'bad' | 'good' | 'great' | null
+
 export type ChatMessage = {
   id: string
   variant: ChatVariant
@@ -8,6 +10,7 @@ export type ChatMessage = {
   isComplete: boolean
   isStreaming?: boolean
   isInterrupted?: boolean
+  feedback?: FeedbackValue
 }
 
 export type InputValue = {

@@ -4,7 +4,7 @@ export const ShortcutsPanel = () => {
   const theme = useTheme()
 
   return (
-    <box style={{ flexDirection: 'row', marginLeft: 1, marginTop: 1, gap: 2 }}>
+    <box style={{ flexDirection: 'row', marginLeft: 1, gap: 2 }}>
       <box style={{ flexDirection: 'column' }}>
         <text style={{ fg: theme.muted }}>/ for commands</text>
         <text style={{ fg: theme.muted }}>@ for file paths</text>

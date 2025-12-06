@@ -1,4 +1,4 @@
-import { forwardRef, useRef } from 'react'
+import { forwardRef, useImperativeHandle, useRef } from 'react'
 import type { BorderCharacters } from '@opentui/core'
 
 import { MultilineInput, type MultilineInputHandle } from './MultilineInput'
@@ -29,24 +29,23 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
       onSubmit,
       focused,
       width,
-      model = 'Sonder',
+      model = 'sonder',
       mode = 'stealth',
       onKeyIntercept,
       hintOverride,
+      accentColor,
     },
     ref
   ) {
     const theme = useTheme()
+    const isSchoolMode = mode === 'school'
+    const borderFg = accentColor ?? (isSchoolMode ? theme.accent : theme.borderColor)
     const inputRef = useRef<MultilineInputHandle | null>(null)
 
-    // Forward ref
-    if (ref) {
-      if (typeof ref === 'function') {
-        ref(inputRef.current)
-      } else {
-        ref.current = inputRef.current
-      }
-    }
+    // Forward ref using useImperativeHandle
+    useImperativeHandle(ref, () => ({
+      focus: () => inputRef.current?.focus(),
+    }))
 
     // Calculate widths
     const innerWidth = width - 2 // minus left and right border chars
@@ -63,7 +62,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
         <box
           style={{
             borderStyle: 'single',
-            borderColor: theme.borderColor,
+            borderColor: borderFg,
             customBorderChars: BORDER_CHARS,
             paddingLeft: 1,
             paddingRight: 1,
@@ -93,13 +92,13 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
 
         {/* Status bar overlaying the bottom border */}
         <box style={{ flexDirection: 'row', marginTop: -1 }}>
-          <text style={{ fg: theme.borderColor }}>{'╰─── '}</text>
+          <text style={{ fg: borderFg }}>{'╰─ '}</text>
           <text style={{ fg: theme.muted }}>{model}</text>
-          <text style={{ fg: theme.borderColor }}>{sep}</text>
-          <text style={{ fg: theme.muted }}>{mode}</text>
-          <text style={{ fg: theme.borderColor }}>{sep}</text>
+          <text style={{ fg: borderFg }}>{sep}</text>
+          <text style={{ fg: isSchoolMode ? theme.accent : theme.muted }}>{mode}</text>
+          <text style={{ fg: borderFg }}>{sep}</text>
           <text style={{ fg: hintOverride ? theme.foreground : theme.muted }}>{hintText}</text>
-          <text style={{ fg: theme.borderColor }}>{' ' + '─'.repeat(dashesAfter) + '╯'}</text>
+          <text style={{ fg: borderFg }}>{' ' + '─'.repeat(dashesAfter) + '╯'}</text>
         </box>
       </box>
     )

@@ -45,4 +45,5 @@ export interface InputBoxProps {
   mode?: string
   onKeyIntercept?: (key: KeyEvent) => boolean
   hintOverride?: string
+  accentColor?: string
 }

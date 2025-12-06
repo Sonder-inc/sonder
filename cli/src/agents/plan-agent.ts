@@ -33,7 +33,7 @@ const planParams = z.object({
 
 type PlanParams = z.infer<typeof planParams>
 
-interface PlanResult {
+export interface PlanResult {
   items: PlanItem[]
 }
 

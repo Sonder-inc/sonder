@@ -1,3 +1,4 @@
+import { tool } from 'ai'
 import type { ToolResult } from './types'
 
 // Import all tools here - adding a new tool = import + add to allTools array
@@ -25,13 +26,13 @@ const toolMap = new Map(
  * Available tools in Vercel AI SDK format
  * Used by openrouter.ts for streamText()
  */
-export const availableTools = Object.fromEntries(
-  allTools.map(tool => [
-    tool.name,
-    {
-      description: tool.description,
-      inputSchema: tool.parameters,
-    },
+export const availableTools: Record<string, ReturnType<typeof tool>> = Object.fromEntries(
+  allTools.map(t => [
+    t.name,
+    tool({
+      description: t.description,
+      inputSchema: t.parameters as any,
+    }),
   ])
 )
 
@@ -62,7 +63,7 @@ export async function executeTool(
     }
   }
 
-  return tool.execute(parsed.data)
+  return tool.execute(parsed.data as never)
 }
 
 /**

@@ -1,13 +1,14 @@
 import { UserMessage } from './UserMessage'
 import { AIMessage } from './AIMessage'
 import { InterruptedIndicator } from './InterruptedIndicator'
-import type { ChatMessage, ToolCall } from '../../types/chat'
+import type { ChatMessage, ToolCall, FeedbackValue } from '../../types/chat'
 
 interface MessageListProps {
   messages: ChatMessage[]
   toolCalls: ToolCall[]
   expandedToolId: string | null
   onToggleExpandTool: (id: string) => void
+  onFeedback: (messageId: string, value: FeedbackValue) => void
 }
 
 export const MessageList = ({
@@ -15,7 +16,11 @@ export const MessageList = ({
   toolCalls,
   expandedToolId,
   onToggleExpandTool,
+  onFeedback,
 }: MessageListProps) => {
+  // Find the last AI message for keyboard feedback handling
+  const lastAiMessageId = [...messages].reverse().find(m => m.variant === 'ai')?.id
+
   return (
     <>
       {messages.map((msg) => {
@@ -33,12 +38,16 @@ export const MessageList = ({
               <UserMessage content={msg.content} />
             ) : (
               <AIMessage
+                messageId={msg.id}
                 content={msg.content}
                 isStreaming={msg.isStreaming}
                 isInterrupted={msg.isInterrupted}
                 toolCalls={messageToolCalls}
                 expandedToolId={expandedToolId}
                 onToggleExpandTool={onToggleExpandTool}
+                feedback={msg.feedback}
+                onFeedback={onFeedback}
+                isLastMessage={msg.id === lastAiMessageId}
               />
             )}
           </box>

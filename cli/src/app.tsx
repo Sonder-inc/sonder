@@ -14,8 +14,10 @@ import { ShortcutsPanel } from './components/panels/ShortcutsPanel'
 import { CommandPanel } from './components/panels/CommandPanel'
 import { ContextPanel } from './components/panels/ContextPanel'
 import { Sidebar } from './components/Sidebar'
+import { SystemInfo } from './components/SystemInfo'
 import { MODELS, MODES, MODEL_IDS } from './constants/app-constants'
 import type { ScrollBoxRenderable } from '@opentui/core'
+import type { FeedbackValue } from './types/chat'
 
 interface AppProps {
   initialPrompt: string | null
@@ -118,12 +120,64 @@ export const App = ({ initialPrompt }: AppProps) => {
     setSmartShortcut,
   })
 
+  // Index of 'school' in the MODES array
+  const SCHOOL_MODE_INDEX = 4
+
+  // Feedback handler
+  const handleFeedback = useCallback((messageId: string, value: FeedbackValue) => {
+    updateMessage(messageId, { feedback: value })
+    // TODO: Send feedback to backend/analytics
+  }, [updateMessage])
+
   const handleSubmit = useCallback(() => {
     const trimmed = inputValue.trim()
     if (!trimmed || isStreaming) return
+
+    // Parse commands
+    if (trimmed.startsWith('/')) {
+      const command = trimmed.split(' ')[0].toLowerCase()
+
+      switch (command) {
+        case '/school':
+          // Toggle school mode - if already in school, go back to stealth (0)
+          setModeIndex((prev) => prev === SCHOOL_MODE_INDEX ? 0 : SCHOOL_MODE_INDEX)
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
+        case '/exit':
+        case '/quit':
+          process.exit(0)
+          return
+
+        case '/clear':
+        case '/reset':
+        case '/new':
+          // TODO: Clear conversation history
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
+        case '/init':
+          // TODO: Initialize sonder in current directory
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
+        case '/config':
+        case '/theme':
+        case '/doctor':
+        case '/login':
+        case '/logout':
+        case '/add-dir':
+        case '/agents':
+        case '/context':
+          // TODO: Implement these commands
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+      }
+    }
+
     handleSendMessage(trimmed)
     setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-  }, [inputValue, isStreaming, handleSendMessage, setInputValue])
+  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex])
 
   useEffect(() => {
     if (initialPrompt && messages.length === 0) {
@@ -175,7 +229,7 @@ export const App = ({ initialPrompt }: AppProps) => {
           }}
         >
           {/* Banner - scrolls with chat */}
-          <WelcomeBanner width={mainWidth} />
+          <WelcomeBanner width={mainWidth} mode={MODES[modeIndex]} />
 
           {/* Messages */}
           <MessageList
@@ -183,6 +237,7 @@ export const App = ({ initialPrompt }: AppProps) => {
             toolCalls={toolCalls}
             expandedToolId={expandedToolId}
             onToggleExpandTool={toggleExpandedTool}
+            onFeedback={handleFeedback}
           />
 
           {/* Streaming status with plan - inside scrollbox */}
@@ -217,6 +272,8 @@ export const App = ({ initialPrompt }: AppProps) => {
           {showShortcuts && <ShortcutsPanel />}
           {showCommands && <CommandPanel inputValue={inputValue} selectedIndex={selectedMenuIndex} />}
           {showContext && <ContextPanel inputValue={inputValue} selectedIndex={selectedMenuIndex} />}
+
+          <SystemInfo />
         </box>
       </box>
 

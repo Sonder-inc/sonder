@@ -16,7 +16,7 @@ export const ContextPanel = ({ inputValue, selectedIndex }: ContextPanelProps) =
   const clampedIndex = Math.min(selectedIndex, filteredContext.length - 1)
 
   return (
-    <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
+    <box style={{ flexDirection: 'column', marginLeft: 1 }}>
       {filteredContext.map((item, idx) => {
         const isSelected = idx === clampedIndex
         return (

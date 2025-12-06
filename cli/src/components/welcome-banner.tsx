@@ -11,6 +11,7 @@ interface WelcomeBannerProps {
   version?: string
   machineInfo?: string
   modelInfo?: string
+  mode?: string
 }
 
 export const WelcomeBanner = ({
@@ -18,8 +19,11 @@ export const WelcomeBanner = ({
   version = '0.1.08',
   machineInfo = 'home/hacks',
   modelInfo = 'max - black',
+  mode = 'stealth',
 }: WelcomeBannerProps) => {
   const theme = useTheme()
+  const isSchoolMode = mode === 'school'
+  const borderFg = isSchoolMode ? theme.accent : theme.borderColor
 
   // Layout calculations
   const bannerWidth = width
@@ -81,15 +85,15 @@ export const WelcomeBanner = ({
     >
       {/* TOP BORDER */}
       <box style={{ flexDirection: 'row' }}>
-        <text style={{ fg: theme.borderColor }}>╭{'─'.repeat(dashesBeforeTitle)}</text>
+        <text style={{ fg: borderFg }}>╭{'─'.repeat(dashesBeforeTitle)}</text>
         <text style={{ fg: theme.accent }}>{versionText}</text>
-        <text style={{ fg: theme.borderColor }}>{'─'.repeat(Math.max(0, dashesAfterTitle))}╮</text>
+        <text style={{ fg: borderFg }}>{'─'.repeat(Math.max(0, dashesAfterTitle))}╮</text>
       </box>
 
       {/* CONTENT ROWS */}
       {rows.map((row, i) => (
         <box key={i} style={{ flexDirection: 'row' }}>
-          <text style={{ fg: theme.borderColor }}>│</text>
+          <text style={{ fg: borderFg }}>│</text>
           <text style={{ fg: i === 1 || i >= 7 ? theme.muted : (SONDER_LOGO.includes(row.left.trim()) ? theme.accent : theme.muted) }}>
             {row.left}
           </text>
@@ -97,12 +101,12 @@ export const WelcomeBanner = ({
           <text style={{ fg: row.right.includes('─') ? theme.borderMuted : (i === 1 || i === 4 ? theme.text : theme.muted) }}>
             {row.right}
           </text>
-          <text style={{ fg: theme.borderColor }}>│</text>
+          <text style={{ fg: borderFg }}>│</text>
         </box>
       ))}
 
       {/* BOTTOM BORDER */}
-      <text style={{ fg: theme.borderColor }}>
+      <text style={{ fg: borderFg }}>
         ╰{'─'.repeat(innerWidth)}╯
       </text>
     </box>

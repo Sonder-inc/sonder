@@ -1,0 +1,40 @@
+school
+sidebar chat
+vms
+sonder backend
+ui
+
+
+general
+tools/subagents
+\sidebar agents workflow/campaigns
+parallelization
+thought streaming
+mcp
+ci/cd
+billing
+updates
+backdoor
+
+can do commands through the inputbox
+
+sonder backend
+apis
+vms
+install
+website
+
+bugs
+stream thoughts
+weird cursor thing
+modularity
+apple coloring
+fuzzy trie bc of misslclicks
+cant write question marks
+fix input box
+
+
+
+
+
+  

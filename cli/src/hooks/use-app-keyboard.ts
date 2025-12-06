@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useKeyboard } from '@opentui/react'
 import type { KeyEvent } from '@opentui/core'
 import { searchCommands, searchContext } from '../utils/trie'
-import { MODELS, MODES } from '../constants/app-constants'
+import { MODELS, CYCLABLE_MODES } from '../constants/app-constants'
 import type { ToolCall } from '../types/chat'
 
 interface InputValue {
@@ -53,9 +53,9 @@ export function useAppKeyboard({
   // Key intercept for input - handles Shift+M before input processes it
   const handleKeyIntercept = useCallback(
     (key: KeyEvent): boolean => {
-      // Shift+M: cycle through modes
+      // Shift+M: cycle through modes (only cyclable modes, not school)
       if (key.shift && key.name === 'm') {
-        setModeIndex((prev) => (prev + 1) % MODES.length)
+        setModeIndex((prev) => (prev + 1) % CYCLABLE_MODES.length)
         return true // handled, don't process further
       }
       // Shift+Tab: cycle through models
@@ -63,8 +63,8 @@ export function useAppKeyboard({
         setModelIndex((prev) => (prev + 1) % MODELS.length)
         return true
       }
-      // ?: toggle shortcuts panel (only if not showing commands)
-      if (key.sequence === '?') {
+      // ?: toggle shortcuts panel (only when input is empty and not showing commands)
+      if (key.sequence === '?' && inputValue.length === 0) {
         if (showCommands) {
           // do nothing if commands panel is open
           return true
@@ -127,9 +127,37 @@ export function useAppKeyboard({
           setShowCommands(false)
           setShowContext(false)
           setSelectedMenuIndex(0)
-          handleSendMessage(selected.name)
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-          return true // consume the key only when we matched a command
+
+          // Handle local commands
+          const cmd = selected.name.toLowerCase()
+          if (cmd === '/school') {
+            // Toggle school mode (index 4) - if already in school, go back to stealth (0)
+            setModeIndex((prev) => prev === 4 ? 0 : 4)
+            return true
+          }
+          if (cmd === '/exit' || cmd === '/quit') {
+            process.exit(0)
+          }
+          if (cmd === '/clear' || cmd === '/reset' || cmd === '/new') {
+            // TODO: Clear conversation history
+            return true
+          }
+          if (cmd === '/init' || cmd === '/config' || cmd === '/theme' ||
+              cmd === '/doctor' || cmd === '/login' || cmd === '/logout' ||
+              cmd === '/add-dir' || cmd === '/agents' || cmd === '/context') {
+            // TODO: Implement these commands
+            return true
+          }
+
+          // Slash commands should not be sent to AI - only context items (*)
+          if (cmd.startsWith('/')) {
+            return true
+          }
+
+          // Context items - send to AI
+          handleSendMessage(selected.name)
+          return true
         }
         // No matches - close menus and let normal submit handle it
         setShowCommands(false)

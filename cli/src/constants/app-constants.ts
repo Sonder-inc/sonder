@@ -1,14 +1,17 @@
-export const MODELS = ['Sonder', 'Opus 4.5', 'GPT5', 'G3 Pro'] as const
+export const MODELS = ['sonder', 'opus 4.5', 'gpt5', 'g3 pro'] as const
 export type ModelName = (typeof MODELS)[number]
 
 export const MODEL_IDS: Record<ModelName, string> = {
-  Sonder: 'anthropic/claude-3.7-sonnet:thinking',
-  'Opus 4.5': 'anthropic/claude-opus-4.5',
-  GPT5: 'openai/gpt-5.1',
-  'G3 Pro': 'google/gemini-3-pro-preview',
+  sonder: 'anthropic/claude-3.7-sonnet:thinking',
+  'opus 4.5': 'anthropic/claude-opus-4.5',
+  gpt5: 'openai/gpt-5.1',
+  'g3 pro': 'google/gemini-3-pro-preview',
 }
 
-export const MODES = ['stealth', 'osint', 'accept', 'kill'] as const
+// Modes accessible via Shift+M cycling
+export const CYCLABLE_MODES = ['stealth', 'osint', 'accept', 'kill'] as const
+// All modes including special ones (school only via /school command)
+export const MODES = [...CYCLABLE_MODES, 'school'] as const
 export type ModeName = (typeof MODES)[number]
 
 // Command definitions for the command menu
@@ -26,6 +29,7 @@ export const COMMANDS: readonly Command[] = [
   { name: '/context', aliases: [], description: 'Visualize current context usage as a colored grid' },
   { name: '/doctor', aliases: [], description: 'Diagnose and verify your installation and settings' },
   { name: '/exit', aliases: ['quit'], description: 'Exit the REPL' },
+  { name: '/init', aliases: [], description: 'Initialize sonder in current directory' },
   { name: '/login', aliases: ['logout'], description: 'Login or logout when already logged in' },
   { name: '/school', aliases: [], description: 'Hacking playground to rank up' },
 ]
@@ -37,15 +41,7 @@ export interface ContextItem {
 }
 
 export const CONTEXT_ITEMS: readonly ContextItem[] = [
-  { name: '*switch', label: 'switch' },
-  { name: '*previous', label: 'previous' },
-  { name: '*parent', label: 'parent' },
-  { name: '*editor', label: 'editor' },
-  { name: '*browser', label: 'browser' },
-  { name: '*copy', label: 'copy' },
-  { name: '*think?', label: 'think?' },
-  { name: '*support', label: 'support' },
-  { name: '*new', label: 'new' },
-  { name: '*handoff', label: 'handoff' },
+  { name: '*context', label: 'context' },
   { name: '*fork', label: 'fork' },
+  { name: '*switch', label: 'switch' },
 ]

@@ -16,7 +16,7 @@ export const CommandPanel = ({ inputValue, selectedIndex }: CommandPanelProps) =
   const clampedIndex = Math.min(selectedIndex, filteredCommands.length - 1)
 
   return (
-    <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
+    <box style={{ flexDirection: 'column', marginLeft: 1 }}>
       {filteredCommands.map((cmd, idx) => {
         const isSelected = idx === clampedIndex
         return (
@@ -32,7 +32,7 @@ export const CommandPanel = ({ inputValue, selectedIndex }: CommandPanelProps) =
                 cmd.name
               )}
             </text>
-            <text style={{ fg: theme.muted, marginLeft: 2 }}>{cmd.description}</text>
+            <text style={{ fg: isSelected ? theme.accent : theme.muted, marginLeft: 2 }}>{cmd.description}</text>
           </box>
         )
       })}
