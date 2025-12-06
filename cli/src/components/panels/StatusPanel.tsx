@@ -61,9 +61,7 @@ export const StatusPanel = ({ model, modelId, mode, version, thinkingEnabled }: 
 
   return (
     <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
-      <text style={{ fg: theme.accent }}>Context Usage</text>
-
-      <box style={{ flexDirection: 'column', marginTop: 1 }}>
+      <box style={{ flexDirection: 'column' }}>
         <box style={{ flexDirection: 'row' }}>
           <text style={{ fg: thinkingEnabled ? theme.accent : theme.muted }}>{model}</text>
           <text style={{ fg: theme.muted }}>{' '}{formatTokens(total)}/{formatTokens(limit)} </text>

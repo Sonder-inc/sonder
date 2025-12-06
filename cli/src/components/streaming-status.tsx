@@ -7,11 +7,24 @@ interface StreamingStatusProps {
   flavorWord: string
   startTime: number
   tokenCount: number
+  isThinking?: boolean
 }
 
-export const StreamingStatus = ({ flavorWord, startTime, tokenCount }: StreamingStatusProps) => {
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+export const StreamingStatus = ({ flavorWord, startTime, tokenCount, isThinking }: StreamingStatusProps) => {
   const theme = useTheme()
   const [elapsed, setElapsed] = useState(0)
+  const [spinnerFrame, setSpinnerFrame] = useState(0)
+
+  // Spinner animation while thinking
+  useEffect(() => {
+    if (!isThinking) return
+    const interval = setInterval(() => {
+      setSpinnerFrame((prev) => (prev + 1) % SPINNER_FRAMES.length)
+    }, 80)
+    return () => clearInterval(interval)
+  }, [isThinking])
   const { items } = usePlanStore()
 
   // Update elapsed time every second
@@ -54,6 +67,17 @@ export const StreamingStatus = ({ flavorWord, startTime, tokenCount }: Streaming
 
   return (
     <box style={{ flexDirection: 'column' }}>
+      {/* Thinking indicator - above flavor word */}
+      {isThinking && (
+        <text style={{ wrapMode: 'none' }}>
+          <span fg={theme.muted}>
+            {SPINNER_FRAMES[spinnerFrame]}{' '}
+          </span>
+          <span fg={theme.muted}>
+            Thinking {elapsed}s
+          </span>
+        </text>
+      )}
       {/* Flavor word or current plan item */}
       <box style={{ flexDirection: 'row' }}>
         <text>

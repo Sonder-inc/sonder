@@ -42,14 +42,16 @@ export const AIMessage = ({
   isLastMessage,
 }: AIMessageProps) => {
   const theme = useTheme()
-  const hasThinking = thinkingContent || isThinking
+  // Only show thinking indicator after streaming completes (for expandable "Thought for Xs")
+  // During streaming, thinking is shown in StreamingStatus
+  const showThinkingIndicator = !isStreaming && thinkingContent
 
   return (
     <>
-      {/* Thinking indicator - shows before content */}
-      {hasThinking && (
+      {/* Thinking indicator - only shows after streaming completes */}
+      {showThinkingIndicator && (
         <ThinkingIndicator
-          status={isThinking ? 'thinking' : 'complete'}
+          status="complete"
           durationMs={thinkingDurationMs ?? 0}
           content={thinkingContent}
           expanded={expandedThinkingId === messageId}
@@ -76,6 +78,10 @@ export const AIMessage = ({
           key={tool.id}
           toolName={tool.toolName}
           params={tool.params}
+          displayName={tool.displayName}
+          displayInput={tool.displayInput}
+          displayMiddle={tool.displayMiddle}
+          displayColor={tool.displayColor}
           status={tool.status}
           summary={tool.summary}
           expanded={expandedToolId === tool.id}

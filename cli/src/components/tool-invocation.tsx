@@ -5,14 +5,17 @@ import { useTheme } from '../hooks/use-theme'
 export interface ToolInvocationProps {
   toolName: string
   params: Record<string, unknown>
+  // UI display customization
+  displayName?: string // Override tool name
+  displayInput?: string // Clean input display (e.g., file path, pattern)
+  displayMiddle?: string // Content between tool line and summary
+  displayColor?: 'default' | 'success' | 'error' // Indicator color
   status: 'executing' | 'complete' | 'error'
   summary?: string
   expanded?: boolean
   fullResult?: string
   onToggleExpand?: () => void
 }
-
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
 const formatParams = (params: Record<string, unknown>): string => {
   return Object.entries(params)
@@ -23,58 +26,92 @@ const formatParams = (params: Record<string, unknown>): string => {
     .join(', ')
 }
 
+const formatTokenCount = (charCount: number): string => {
+  const tokens = Math.round(charCount / 4) // Rough estimate
+  return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k tok` : `${tokens} tok`
+}
+
 export const ToolInvocation = ({
   toolName,
   params,
+  displayName,
+  displayInput,
+  displayMiddle,
+  displayColor,
   status,
   summary,
   expanded,
   fullResult,
 }: ToolInvocationProps) => {
   const theme = useTheme()
-  const [spinnerFrame, setSpinnerFrame] = useState(0)
+  const [blinkOn, setBlinkOn] = useState(true)
 
   useEffect(() => {
     if (status !== 'executing') return
     const interval = setInterval(() => {
-      setSpinnerFrame((prev) => (prev + 1) % SPINNER_FRAMES.length)
-    }, 80)
+      setBlinkOn((prev) => !prev)
+    }, 500) // Blink every 500ms
     return () => clearInterval(interval)
   }, [status])
 
-  const paramStr = formatParams(params)
+  // Use displayInput if provided, otherwise fall back to formatted params
+  const inputDisplay = displayInput ?? formatParams(params)
 
-  // Truncate params if too long
-  const maxParamLen = 60
-  const truncatedParams = paramStr.length > maxParamLen
-    ? paramStr.slice(0, maxParamLen) + '...'
-    : paramStr
+  // Truncate if too long
+  const maxLen = 60
+  const truncatedInput = inputDisplay.length > maxLen
+    ? inputDisplay.slice(0, maxLen) + '...'
+    : inputDisplay
+
+  // Token count for expand hint
+  const tokenHint = fullResult ? ` ${formatTokenCount(fullResult.length)}` : ''
+
+  // Use displayName if provided, otherwise use toolName
+  const nameToShow = displayName ?? toolName
+
+  // Determine indicator color
+  const getIndicatorColor = () => {
+    if (status === 'executing') return theme.accent
+    if (status === 'error') return theme.error
+    // Use displayColor if provided, otherwise default to foreground (white)
+    switch (displayColor) {
+      case 'success': return theme.success
+      case 'error': return theme.error
+      default: return theme.foreground
+    }
+  }
+
+  // Summary color: grey if no expandable content, otherwise normal
+  const summaryColor = fullResult ? theme.foreground : theme.muted
 
   return (
     <box style={{ flexDirection: 'column', marginBottom: 1 }}>
       {/* Tool invocation line */}
       <text style={{ wrapMode: 'none' }}>
-        <span fg={status === 'error' ? theme.error : theme.accent}>
-          {status === 'executing' ? SPINNER_FRAMES[spinnerFrame] : '⏺'}{' '}
+        <span fg={status === 'executing' && !blinkOn ? theme.background : getIndicatorColor()}>
+          {'●'}{' '}
         </span>
-        <span fg={theme.foreground}>{toolName}</span>
-        <span fg={theme.muted}>({truncatedParams})</span>
+        <span fg={theme.foreground}>{nameToShow}</span>
+        <span fg={theme.muted}>({truncatedInput})</span>
       </text>
+
+      {/* Middle content (if provided) */}
+      {displayMiddle && (
+        <text style={{ marginLeft: 2, fg: theme.muted }}>
+          │ {displayMiddle}
+        </text>
+      )}
 
       {/* Result summary line */}
       {status !== 'executing' && summary && (
-        <box style={{ flexDirection: 'row', marginLeft: 2 }}>
-          <text style={{ fg: theme.muted }}>
-            ⎿ {summary}
-          </text>
+        <text style={{ marginLeft: 2, wrapMode: 'word' }}>
+          <span fg={summaryColor}>⎿ {summary}</span>
           {fullResult && (
-            <text>
-              <span fg={theme.muted} attributes={TextAttributes.DIM}>
-                {' '}(ctrl+o to {expanded ? 'collapse' : 'expand'})
-              </span>
-            </text>
+            <span fg={theme.muted} attributes={TextAttributes.DIM}>
+              {' '}(⌃o{tokenHint})
+            </span>
           )}
-        </box>
+        </text>
       )}
 
       {/* Expanded result */}
