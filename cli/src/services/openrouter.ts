@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { streamText, generateText } from 'ai'
 import type { CoreMessage } from 'ai'
 import { availableTools } from '../tools'
@@ -65,13 +65,10 @@ export async function getFlavorWord(userMessage: string): Promise<string | null>
   }
 
   try {
-    const openrouter = createOpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey,
-    })
+    const openrouter = createOpenRouter({ apiKey })
 
     const result = await generateText({
-      model: openrouter.chat('anthropic/claude-3.5-haiku'),
+      model: openrouter('anthropic/claude-3.5-haiku'),
       prompt: FLAVOR_PROMPT + userMessage,
     })
 
@@ -95,13 +92,10 @@ export async function generateConversationSummary(conversationText: string): Pro
   if (!apiKey) return 'Conversation summary'
 
   try {
-    const openrouter = createOpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey,
-    })
+    const openrouter = createOpenRouter({ apiKey })
 
     const result = await generateText({
-      model: openrouter.chat('anthropic/claude-3.5-haiku'),
+      model: openrouter('anthropic/claude-3.5-haiku'),
       prompt: SUMMARY_PROMPT + conversationText,
     })
 
@@ -121,13 +115,10 @@ export async function getSmartShortcut(conversationSummary: string): Promise<str
   if (!apiKey) return null
 
   try {
-    const openrouter = createOpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey,
-    })
+    const openrouter = createOpenRouter({ apiKey })
 
     const result = await generateText({
-      model: openrouter.chat('anthropic/claude-3.5-haiku'),
+      model: openrouter('anthropic/claude-3.5-haiku'),
       prompt: SMART_SHORTCUT_PROMPT + conversationSummary,
     })
 
@@ -165,13 +156,19 @@ export async function streamChat(
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set')
 
-  const openrouter = createOpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
+  // For thinking models, OpenRouter calculates budget as 80% of maxTokens
+  const isThinkingModel = model.includes(':thinking')
+
+  const openrouter = createOpenRouter({
     apiKey,
+    // Enable reasoning tokens and set max_tokens for thinking models
+    extraBody: isThinkingModel
+      ? { include_reasoning: true, max_tokens: 16000 }
+      : undefined,
   })
 
   const result = streamText({
-    model: openrouter.chat(model),
+    model: openrouter(model),
     messages,
     tools: useTools ? availableTools : undefined,
     abortSignal,
@@ -180,20 +177,30 @@ export async function streamChat(
   let fullText = ''
   let tokenCount = 0
   const toolCalls: ToolCallRequest[] = []
-  let hasReasoning = false
+  let reasoningEnded = false
 
   try {
     for await (const part of result.fullStream) {
       if (abortSignal?.aborted) break
 
+      // Debug: log part types to see what we're receiving
+      if (process.env.DEBUG_STREAM) {
+        console.error(`[stream] part.type: ${part.type}`)
+      }
+
       if (part.type === 'reasoning-delta') {
         // Reasoning/thinking content from thinking models
-        hasReasoning = true
         callbacks.onReasoning?.(part.text)
       } else if (part.type === 'reasoning-end') {
         // Reasoning phase complete
+        reasoningEnded = true
         callbacks.onReasoningComplete?.()
       } else if (part.type === 'text-delta') {
+        // End reasoning on first content chunk (for non-thinking models or fallback)
+        if (!reasoningEnded) {
+          reasoningEnded = true
+          callbacks.onReasoningComplete?.()
+        }
         fullText += part.text
         tokenCount = Math.ceil(fullText.length / 4)
         callbacks.onChunk(part.text, tokenCount)

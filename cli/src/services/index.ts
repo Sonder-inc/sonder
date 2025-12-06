@@ -35,3 +35,10 @@ export type { SupportTicket, SupportResult } from './support'
 
 // MCP
 export { mcpManager } from './mcp-manager'
+export type {
+  MCPToolDefinition,
+  MCPToolCallResult,
+  MCPServerCapabilities,
+  MCPInitializeResult,
+  AvailableMCPTool,
+} from './mcp-types'
