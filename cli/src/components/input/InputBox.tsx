@@ -31,6 +31,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
       width,
       model = 'sonder',
       mode = 'stealth',
+      thinkingEnabled = true,
       onKeyIntercept,
       hintOverride,
       accentColor,
@@ -95,7 +96,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
         {/* Status bar overlaying the bottom border */}
         <box style={{ flexDirection: 'row', marginTop: -1 }}>
           <text style={{ fg: borderFg }}>{'╰─ '}</text>
-          <text style={{ fg: theme.muted }}>{model}</text>
+          <text style={{ fg: thinkingEnabled ? theme.accent : theme.muted }}>{model}</text>
           <text style={{ fg: borderFg }}>{sep}</text>
           <text style={{ fg: isSchoolMode ? theme.accent : theme.muted }}>{mode}</text>
           <text style={{ fg: borderFg }}>{sep}</text>

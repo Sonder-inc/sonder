@@ -23,6 +23,9 @@ interface UseAppKeyboardOptions {
   setModelIndex: (fn: (prev: number) => number) => void
   modeIndex: number
   setModeIndex: (fn: (prev: number) => number) => void
+  // Thinking mode
+  thinkingEnabled: boolean
+  setThinkingEnabled: (fn: (prev: boolean) => boolean) => void
   // Smart shortcut
   smartShortcut: string | null
   setSmartShortcut: (shortcut: string | null) => void
@@ -43,6 +46,8 @@ export function useAppKeyboard({
   setModelIndex,
   modeIndex,
   setModeIndex,
+  thinkingEnabled,
+  setThinkingEnabled,
   smartShortcut,
   setSmartShortcut,
   showStatusPanel,
@@ -72,6 +77,11 @@ export function useAppKeyboard({
       // Shift+Tab: cycle through models
       if (key.shift && key.name === 'tab') {
         setModelIndex((prev) => (prev + 1) % MODELS.length)
+        return true
+      }
+      // Shift+T: toggle thinking mode
+      if (key.shift && key.name === 't') {
+        setThinkingEnabled((prev) => !prev)
         return true
       }
       // ?: toggle shortcuts panel (only when input is empty and not showing commands)
@@ -203,7 +213,7 @@ export function useAppKeyboard({
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, smartShortcut, setSmartShortcut],
+    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut],
   )
 
   // Global keyboard handler for Ctrl+C, Ctrl+O, Escape, and backspace

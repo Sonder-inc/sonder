@@ -20,7 +20,7 @@ export const CommandPanel = ({ inputValue, selectedIndex }: CommandPanelProps) =
       {filteredCommands.map((cmd, idx) => {
         const isSelected = idx === clampedIndex
         return (
-          <box key={cmd.name} style={{ flexDirection: 'column' }}>
+          <box key={cmd.name} style={{ flexDirection: 'row' }}>
             <text style={{ fg: theme.slashCommandFg }}>
               {isSelected ? (
                 <ShimmerText
@@ -32,7 +32,7 @@ export const CommandPanel = ({ inputValue, selectedIndex }: CommandPanelProps) =
                 cmd.name
               )}
             </text>
-            <text style={{ fg: isSelected ? theme.accent : theme.muted, marginLeft: 2 }}>{cmd.description}</text>
+            <text style={{ fg: isSelected ? theme.accent : theme.muted }}> {cmd.description}</text>
           </box>
         )
       })}

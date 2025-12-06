@@ -1,11 +1,23 @@
 export const MODELS = ['sonder', 'opus 4.5', 'gpt5', 'g3 pro'] as const
 export type ModelName = (typeof MODELS)[number]
 
+// Base model IDs (without thinking suffix)
 export const MODEL_IDS: Record<ModelName, string> = {
-  sonder: 'anthropic/claude-3.7-sonnet:thinking',
+  sonder: 'anthropic/claude-3.7-sonnet',
   'opus 4.5': 'anthropic/claude-opus-4.5',
   gpt5: 'openai/gpt-5.1',
   'g3 pro': 'google/gemini-3-pro-preview',
+}
+
+// Models that support thinking mode
+export const THINKING_CAPABLE_MODELS: ModelName[] = ['sonder']
+
+export function getModelId(model: ModelName, thinkingEnabled: boolean): string {
+  const baseId = MODEL_IDS[model]
+  if (thinkingEnabled && THINKING_CAPABLE_MODELS.includes(model)) {
+    return `${baseId}:thinking`
+  }
+  return baseId
 }
 
 // Modes accessible via Shift+M cycling

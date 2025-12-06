@@ -43,6 +43,7 @@ export interface InputBoxProps {
   width: number
   model?: string
   mode?: string
+  thinkingEnabled?: boolean
   onKeyIntercept?: (key: KeyEvent) => boolean
   hintOverride?: string
   accentColor?: string

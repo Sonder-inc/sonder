@@ -16,7 +16,7 @@ import { ContextPanel } from './components/panels/ContextPanel'
 import { StatusPanel } from './components/panels/StatusPanel'
 import { Sidebar } from './components/Sidebar'
 import { SystemInfo } from './components/SystemInfo'
-import { MODELS, MODES, MODEL_IDS } from './constants/app-constants'
+import { MODELS, MODES, getModelId } from './constants/app-constants'
 import type { ScrollBoxRenderable } from '@opentui/core'
 import type { FeedbackValue } from './types/chat'
 
@@ -32,6 +32,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
   const inputRef = useRef<MultilineInputHandle | null>(null)
   const [modelIndex, setModelIndex] = useState(0)
   const [modeIndex, setModeIndex] = useState(0)
+  const [thinkingEnabled, setThinkingEnabled] = useState(true)
   const [showStatusPanel, setShowStatusPanel] = useState(false)
 
   const {
@@ -87,7 +88,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     tokenCount,
     cancelStream,
   } = useChatHandler({
-    model: MODEL_IDS[MODELS[modelIndex]],
+    model: getModelId(MODELS[modelIndex], thinkingEnabled),
     messages,
     addMessage,
     updateMessage,
@@ -120,6 +121,8 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     setModelIndex,
     modeIndex,
     setModeIndex,
+    thinkingEnabled,
+    setThinkingEnabled,
     smartShortcut,
     setSmartShortcut,
     showStatusPanel,
@@ -275,6 +278,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
             width={mainWidth}
             model={MODELS[modelIndex]}
             mode={MODES[modeIndex]}
+            thinkingEnabled={thinkingEnabled}
             onKeyIntercept={handleKeyIntercept}
             hintOverride={pendingExit ? 'exit? [^C]' : undefined}
           />
@@ -286,9 +290,10 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
           {showStatusPanel && (
             <StatusPanel
               model={MODELS[modelIndex]}
-              modelId={MODEL_IDS[MODELS[modelIndex]]}
+              modelId={getModelId(MODELS[modelIndex], thinkingEnabled)}
               mode={MODES[modeIndex]}
               version={version}
+              thinkingEnabled={thinkingEnabled}
             />
           )}
 
