@@ -1,0 +1,136 @@
+name: Vulnerability Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of scan to run'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - security
+          - code-quality
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+        working-directory: cli
+
+      - name: Get changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+          fi
+          HEAD_SHA="${{ github.sha }}"
+
+          # Get changed TS/TSX files only
+          FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA 2>/dev/null | grep -E '\.(ts|tsx)$' | grep -v '\.d\.ts$' || true)
+
+          if [ -z "$FILES" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Sonder Vulnerability Scan
+        if: steps.changed.outputs.has_changes == 'true'
+        id: scan
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          PROMPT="You are a security auditor. Scan these files for vulnerabilities:
+
+          Files to scan:
+          ${{ steps.changed.outputs.files }}
+
+          Check for:
+          1. **Injection vulnerabilities** - command injection, SQL injection, XSS
+          2. **Authentication issues** - hardcoded secrets, weak validation
+          3. **Input validation** - missing sanitization, type coercion
+          4. **Error handling** - information leakage, unhandled exceptions
+          5. **Dependency issues** - known CVEs, outdated packages
+          6. **Logic flaws** - race conditions, authorization bypass
+
+          For each issue found, output in this JSON format:
+          {
+            \"vulnerabilities\": [
+              {
+                \"severity\": \"critical|high|medium|low\",
+                \"file\": \"path/to/file.ts\",
+                \"line\": 42,
+                \"title\": \"Brief title\",
+                \"description\": \"What the issue is\",
+                \"fix\": \"How to fix it\"
+              }
+            ]
+          }
+
+          If no vulnerabilities found, output: {\"vulnerabilities\": []}"
+
+          OUTPUT=$(bun run cli/src/index.tsx --headless "$PROMPT" 2>&1 || true)
+          echo "scan_output<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create issues for vulnerabilities
+        if: steps.changed.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCAN_OUTPUT: ${{ steps.scan.outputs.scan_output }}
+        run: |
+          # Parse vulnerabilities and create issues
+          # This is a simplified version - in production you'd parse JSON properly
+
+          if echo "$SCAN_OUTPUT" | grep -q '"severity": "critical\|high"'; then
+            TITLE="[Security] Vulnerabilities found in commit ${{ github.sha }}"
+            BODY="## Vulnerability Scan Results
+
+          **Commit:** ${{ github.sha }}
+          **Branch:** ${{ github.ref_name }}
+          **Scan Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          ### Findings
+
+          \`\`\`
+          $SCAN_OUTPUT
+          \`\`\`
+
+          ---
+          *This issue was automatically created by the vulnerability scanner.*
+          *Label: \`security\`, \`automated\`*"
+
+            gh issue create \
+              --title "$TITLE" \
+              --body "$BODY" \
+              --label "security,automated,needs-fix"
+          fi

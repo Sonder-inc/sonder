@@ -23,6 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+        working-directory: cli
 
       - name: Get changed files
         id: changed
