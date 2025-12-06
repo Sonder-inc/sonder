@@ -5,6 +5,7 @@ import { useSmartShortcut } from './use-smart-shortcut'
 import { useStreaming } from './use-streaming'
 import { useToolExecutor } from './use-tool-executor'
 import { usePlanStore } from '../state/plan-store'
+import { useThreadStore } from '../state/thread-store'
 import type { ChatMessage, ToolCall } from '../types/chat'
 
 interface UseChatHandlerOptions {
@@ -51,6 +52,11 @@ export function useChatHandler({
   const { checkAndGenerateShortcut } = useSmartShortcut({ messages, setSmartShortcut })
   const { registerToolCall, executeToolCall } = useToolExecutor({ addToolCall, updateToolCall })
 
+  // Thread store for linking messages
+  const currentThreadId = useThreadStore((state) => state.currentThreadId)
+  const addMessageToThread = useThreadStore((state) => state.addMessageToThread)
+  const checkAutoCompact = useThreadStore((state) => state.checkAutoCompact)
+
   const handleSendMessage = useCallback(
     async (content: string) => {
       // Clear any existing plan from previous message
@@ -65,6 +71,11 @@ export function useChatHandler({
         timestamp: new Date(),
         isComplete: true,
       })
+
+      // Link user message to current thread
+      if (currentThreadId) {
+        addMessageToThread(currentThreadId, userMessageId)
+      }
 
       // Check for smart shortcut generation
       const newCount = incrementUserMessageCount()
@@ -160,9 +171,19 @@ export function useChatHandler({
         }
 
         updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
+        // Link AI message to current thread
+        if (currentThreadId) {
+          addMessageToThread(currentThreadId, currentMessageId)
+          // Check for auto-compact (fire and forget)
+          void checkAutoCompact()
+        }
       } catch (error) {
         if (abortController.signal.aborted) {
           updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
+          // Link interrupted message to thread
+          if (currentThreadId) {
+            addMessageToThread(currentThreadId, currentMessageId)
+          }
         } else {
           const errorMsg = error instanceof Error ? error.message : String(error)
           updateMessage(currentMessageId, {
@@ -200,6 +221,9 @@ export function useChatHandler({
       registerToolCall,
       executeToolCall,
       abortControllerRef,
+      currentThreadId,
+      addMessageToThread,
+      checkAutoCompact,
     ],
   )
 

@@ -3,7 +3,11 @@ import { useKeyboard } from '@opentui/react'
 import type { KeyEvent } from '@opentui/core'
 import { searchCommands, searchContext } from '../utils/trie'
 import { MODELS, CYCLABLE_MODES } from '../constants/app-constants'
-import type { ToolCall } from '../types/chat'
+import type { ToolCall, ChatMessage } from '../types/chat'
+import type { ContextFocusPhase } from '../components/panels/ContextPanel'
+import { useWorktreeNavigation } from './use-worktree-navigation'
+import { useThreadStore } from '../state/thread-store'
+import { saveMessage } from '../services/message-persistence'
 
 interface InputValue {
   text: string
@@ -32,6 +36,12 @@ interface UseAppKeyboardOptions {
   // Status panel
   showStatusPanel?: boolean
   setShowStatusPanel?: (show: boolean) => void
+  // Config panel
+  showConfigPanel?: boolean
+  setShowConfigPanel?: (show: boolean) => void
+  // Message handling for compact summary
+  addMessage?: (message: ChatMessage) => void
+  clearMessages?: () => void
 }
 
 export function useAppKeyboard({
@@ -52,17 +62,41 @@ export function useAppKeyboard({
   setSmartShortcut,
   showStatusPanel,
   setShowStatusPanel,
+  showConfigPanel,
+  setShowConfigPanel,
+  addMessage,
+  clearMessages,
 }: UseAppKeyboardOptions) {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCommands, setShowCommands] = useState(false)
   const [showContext, setShowContext] = useState(false)
   const [selectedMenuIndex, setSelectedMenuIndex] = useState(0)
   const [pendingExit, setPendingExit] = useState(false)
+  const [contextFocusPhase, setContextFocusPhase] = useState<ContextFocusPhase>('menu')
   const pendingExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // For double ?? detection
+  const lastQuestionMarkTime = useRef(0)
+
+  // Worktree navigation
+  const worktreeNav = useWorktreeNavigation()
+  const switchThread = useThreadStore((state) => state.switchThread)
+  const forkThread = useThreadStore((state) => state.forkThread)
+  const compactThread = useThreadStore((state) => state.compactThread)
+  const addMessageToThread = useThreadStore((state) => state.addMessageToThread)
+  const currentThreadId = useThreadStore((state) => state.currentThreadId)
+
+  // Track what action triggered worktree open: 'switch' or 'fork'
+  const [worktreeAction, setWorktreeAction] = useState<'switch' | 'fork'>('switch')
 
   // Key intercept for input - handles Shift+M before input processes it
   const handleKeyIntercept = useCallback(
     (key: KeyEvent): boolean => {
+      // Let ConfigPanel handle its own keyboard events
+      if (showConfigPanel) {
+        return false // don't intercept, let ConfigPanel handle it
+      }
+
       // Close status panel on any keypress
       if (showStatusPanel && setShowStatusPanel) {
         setShowStatusPanel(false)
@@ -110,8 +144,19 @@ export function useAppKeyboard({
         setSelectedMenuIndex(0)
         return false // let it type the /
       }
-      // Arrow keys: navigate command menu or context menu
+      // Arrow keys: navigate command menu, context menu, or worktree
       if ((showCommands || showContext) && (key.name === 'up' || key.name === 'down')) {
+        // If in worktree phase, navigate the tree
+        if (showContext && contextFocusPhase === 'worktree') {
+          if (key.name === 'up') {
+            worktreeNav.navigateUp()
+          } else {
+            worktreeNav.navigateDown()
+          }
+          return true
+        }
+
+        // Otherwise navigate menu items
         const filtered = showCommands ? searchCommands(inputValue) : searchContext(inputValue)
         if (filtered.length > 0) {
           if (key.name === 'up') {
@@ -122,14 +167,25 @@ export function useAppKeyboard({
         }
         return true // consume the key
       }
+
+      // In worktree phase: any key except Enter/arrows goes back to menu phase
+      if (showContext && contextFocusPhase === 'worktree') {
+        const isNavigationKey = key.name === 'up' || key.name === 'down' || key.name === 'return' || key.name === 'enter'
+        if (!isNavigationKey) {
+          // Go back to menu phase (compact/fork/switch selection)
+          setContextFocusPhase('menu')
+          setWorktreeAction('switch') // Reset to default
+          return true
+        }
+      }
       // Tab with empty input and no menu: send smart shortcut from queue
       if (key.name === 'tab' && inputValue.length === 0 && !showCommands && !showContext && smartShortcut) {
         handleSendMessage(smartShortcut)
         setSmartShortcut(null) // Clear - next suggestion will replace it
         return true
       }
-      // Tab: autocomplete selected item (just fill in, don't submit)
-      if ((showCommands || showContext) && key.name === 'tab') {
+      // Tab: autocomplete selected item (commands or context menu)
+      if ((showCommands || showContext) && key.name === 'tab' && contextFocusPhase === 'menu') {
         const filtered = showCommands ? searchCommands(inputValue) : searchContext(inputValue)
         if (filtered.length > 0) {
           const selected = filtered[selectedMenuIndex] ?? filtered[0]
@@ -142,16 +198,53 @@ export function useAppKeyboard({
       }
       // Enter: select item from command menu or context menu
       if ((showCommands || showContext) && (key.name === 'return' || key.name === 'enter')) {
+        // If in worktree phase, handle based on action (switch or fork)
+        if (showContext && contextFocusPhase === 'worktree' && worktreeNav.selectedThreadId) {
+          if (worktreeAction === 'fork') {
+            // Fork from selected thread
+            forkThread(worktreeNav.selectedThreadId, '')
+          } else {
+            // Switch to selected thread
+            switchThread(worktreeNav.selectedThreadId)
+          }
+          setShowContext(false)
+          setContextFocusPhase('menu')
+          setWorktreeAction('switch') // Reset to default
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return true
+        }
+
         const filtered = showCommands ? searchCommands(inputValue) : searchContext(inputValue)
         if (filtered.length > 0) {
           const selected = filtered[selectedMenuIndex] ?? filtered[0]
+          const cmd = selected.name.toLowerCase()
+
+          // Handle context items that open worktree (don't close panel, keep input)
+          if (cmd === '*fork') {
+            // Open worktree to select WHERE to fork from
+            setWorktreeAction('fork')
+            setContextFocusPhase('worktree')
+            worktreeNav.initializeSelection()
+            // Don't clear input - keeps panel open
+            return true
+          }
+          if (cmd === '*switch') {
+            // Open worktree to navigate and switch to any block
+            setWorktreeAction('switch')
+            setContextFocusPhase('worktree')
+            worktreeNav.initializeSelection()
+            // Don't clear input - keeps panel open
+            return true
+          }
+
+          // For all other commands, close the panels first
           setShowCommands(false)
           setShowContext(false)
           setSelectedMenuIndex(0)
+          setContextFocusPhase('menu')
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
 
           // Handle local commands
-          const cmd = selected.name.toLowerCase()
           if (cmd === '/school') {
             // Toggle school mode (index 4) - if already in school, go back to stealth (0)
             setModeIndex((prev) => prev === 4 ? 0 : 4)
@@ -168,9 +261,12 @@ export function useAppKeyboard({
             if (setShowStatusPanel) setShowStatusPanel(true)
             return true
           }
-          if (cmd === '/init' || cmd === '/config' || cmd === '/theme' ||
-              cmd === '/doctor' || cmd === '/login' || cmd === '/logout' ||
-              cmd === '/add-dir' || cmd === '/agents') {
+          if (cmd === '/config' || cmd === '/theme') {
+            if (setShowConfigPanel) setShowConfigPanel(true)
+            return true
+          }
+          if (cmd === '/init' || cmd === '/doctor' || cmd === '/login' ||
+              cmd === '/logout' || cmd === '/add-dir' || cmd === '/agents') {
             // TODO: Implement these commands
             return true
           }
@@ -180,7 +276,34 @@ export function useAppKeyboard({
             return true
           }
 
-          // Context items - send to AI
+          // Handle context item *compact
+          if (cmd === '*compact') {
+            // Create new compact block after current and move there (async)
+            void (async () => {
+              const { threadId, summary } = await compactThread()
+              if (threadId && summary && addMessage && clearMessages) {
+                // Clear existing messages first
+                clearMessages()
+                // Clear terminal screen (ANSI escape: clear screen + move cursor home)
+                process.stdout.write('\x1b[2J\x1b[H')
+                // Add system message with summary to the new thread
+                const summaryMessage: ChatMessage = {
+                  id: `sys-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                  variant: 'system',
+                  content: `📦 Previous conversation: ${summary}`,
+                  timestamp: new Date(),
+                  isComplete: true,
+                }
+                addMessage(summaryMessage)
+                // Persist and link to thread
+                saveMessage(summaryMessage)
+                addMessageToThread(threadId, summaryMessage.id)
+              }
+            })()
+            return true
+          }
+
+          // Other context items - send to AI
           handleSendMessage(selected.name)
           return true
         }
@@ -188,6 +311,7 @@ export function useAppKeyboard({
         setShowCommands(false)
         setShowContext(false)
         setSelectedMenuIndex(0)
+        setContextFocusPhase('menu')
         return false
       }
       // Space: close menu panels (item is complete)
@@ -204,22 +328,29 @@ export function useAppKeyboard({
         }
         return false // let it delete the character
       }
-      // Escape: close panels
+      // Escape: close panels and reset focus phase
       if (key.name === 'escape' && (showShortcuts || showCommands || showContext)) {
         setShowShortcuts(false)
         setShowCommands(false)
         setShowContext(false)
+        setContextFocusPhase('menu')
+        setWorktreeAction('switch') // Reset to default
         return true
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut],
+    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, showConfigPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut, contextFocusPhase, worktreeNav, switchThread, forkThread, compactThread, addMessageToThread, addMessage, clearMessages, currentThreadId, worktreeAction],
   )
 
   // Global keyboard handler for Ctrl+C, Ctrl+O, Escape, and backspace
   useKeyboard(
     useCallback(
       (key: KeyEvent) => {
+        // Let ConfigPanel handle its own keyboard events
+        if (showConfigPanel) {
+          return
+        }
+
         // Escape: cancel streaming if active
         if (key.name === 'escape' && isStreaming) {
           cancelStream()
@@ -281,7 +412,7 @@ export function useAppKeyboard({
           }
         }
       },
-      [inputValue, setInputValue, showShortcuts, showContext, pendingExit, isStreaming, cancelStream, toolCalls, toggleExpandedTool],
+      [inputValue, setInputValue, showShortcuts, showContext, pendingExit, isStreaming, cancelStream, toolCalls, toggleExpandedTool, showConfigPanel],
     ),
   )
 
@@ -305,5 +436,9 @@ export function useAppKeyboard({
     setShowShortcuts,
     setShowCommands,
     setShowContext,
+    // Worktree navigation
+    contextFocusPhase,
+    worktreeSelectedId: worktreeNav.selectedThreadId,
+    worktreeAction,
   }
 }

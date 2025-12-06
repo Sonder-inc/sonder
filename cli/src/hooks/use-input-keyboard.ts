@@ -300,17 +300,69 @@ export function useInputKeyboard({
           return
         }
 
-        // Up arrow
+        // Up arrow: move to previous line at same column
         if (key.name === 'up' && !key.ctrl && !key.meta && !key.option) {
           preventKeyDefault(key)
-          moveCursor(0)
+          const lines = value.split('\n')
+          // Find current line and column
+          let charCount = 0
+          let currentLine = 0
+          for (let i = 0; i < lines.length; i++) {
+            const lineLen = lines[i].length
+            if (charCount + lineLen >= cursorPosition) {
+              currentLine = i
+              break
+            }
+            charCount += lineLen + 1 // +1 for newline
+          }
+          const currentLineStart = charCount
+          const currentCol = cursorPosition - currentLineStart
+
+          if (currentLine > 0) {
+            // Move to previous line at same column (or end if shorter)
+            let prevLineStart = 0
+            for (let i = 0; i < currentLine - 1; i++) {
+              prevLineStart += lines[i].length + 1
+            }
+            const prevLineLen = lines[currentLine - 1].length
+            moveCursor(prevLineStart + Math.min(currentCol, prevLineLen))
+          } else {
+            // Already on first line, go to start
+            moveCursor(0)
+          }
           return
         }
 
-        // Down arrow
+        // Down arrow: move to next line at same column
         if (key.name === 'down' && !key.ctrl && !key.meta && !key.option) {
           preventKeyDefault(key)
-          moveCursor(value.length)
+          const lines = value.split('\n')
+          // Find current line and column
+          let charCount = 0
+          let currentLine = 0
+          for (let i = 0; i < lines.length; i++) {
+            const lineLen = lines[i].length
+            if (charCount + lineLen >= cursorPosition) {
+              currentLine = i
+              break
+            }
+            charCount += lineLen + 1 // +1 for newline
+          }
+          const currentLineStart = charCount
+          const currentCol = cursorPosition - currentLineStart
+
+          if (currentLine < lines.length - 1) {
+            // Move to next line at same column (or end if shorter)
+            let nextLineStart = 0
+            for (let i = 0; i <= currentLine; i++) {
+              nextLineStart += lines[i].length + 1
+            }
+            const nextLineLen = lines[currentLine + 1].length
+            moveCursor(nextLineStart + Math.min(currentCol, nextLineLen))
+          } else {
+            // Already on last line, go to end
+            moveCursor(value.length)
+          }
           return
         }
 

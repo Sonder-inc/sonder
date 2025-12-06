@@ -1,7 +1,9 @@
 import { useCallback } from 'react'
 import { executeTool } from '../tools'
+import { useThreadStore } from '../state/thread-store'
 import type { ToolCall } from '../types/chat'
 import type { ToolCallRequest } from '../services/openrouter'
+import type { FileChangeStats } from '../tools/types'
 
 interface UseToolExecutorOptions {
   addToolCall: (call: ToolCall) => void
@@ -14,6 +16,7 @@ interface ToolExecutionResult {
     success: boolean
     summary: string
     fullResult: string
+    fileStats?: FileChangeStats
   }
 }
 
@@ -29,6 +32,9 @@ export function useToolExecutor({
   addToolCall,
   updateToolCall,
 }: UseToolExecutorOptions): UseToolExecutorResult {
+  const currentThreadId = useThreadStore((state) => state.currentThreadId)
+  const updateThreadStats = useThreadStore((state) => state.updateThreadStats)
+
   const registerToolCall = useCallback(
     (toolCall: ToolCallRequest, messageId: string): string => {
       const toolId = `tool-${toolCall.id}`
@@ -55,12 +61,21 @@ export function useToolExecutor({
         fullResult: toolResult.fullResult,
       })
 
+      // Update thread stats if tool returned file changes
+      if (toolResult.fileStats && currentThreadId) {
+        updateThreadStats(currentThreadId, {
+          additions: toolResult.fileStats.additions,
+          changes: toolResult.fileStats.changes,
+          deletions: toolResult.fileStats.deletions,
+        })
+      }
+
       return {
         toolId,
         result: toolResult,
       }
     },
-    [updateToolCall],
+    [updateToolCall, currentThreadId, updateThreadStats],
   )
 
   return {
