@@ -26,6 +26,9 @@ interface UseAppKeyboardOptions {
   // Smart shortcut
   smartShortcut: string | null
   setSmartShortcut: (shortcut: string | null) => void
+  // Status panel
+  showStatusPanel?: boolean
+  setShowStatusPanel?: (show: boolean) => void
 }
 
 export function useAppKeyboard({
@@ -42,6 +45,8 @@ export function useAppKeyboard({
   setModeIndex,
   smartShortcut,
   setSmartShortcut,
+  showStatusPanel,
+  setShowStatusPanel,
 }: UseAppKeyboardOptions) {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCommands, setShowCommands] = useState(false)
@@ -53,6 +58,12 @@ export function useAppKeyboard({
   // Key intercept for input - handles Shift+M before input processes it
   const handleKeyIntercept = useCallback(
     (key: KeyEvent): boolean => {
+      // Close status panel on any keypress
+      if (showStatusPanel && setShowStatusPanel) {
+        setShowStatusPanel(false)
+        return true // consume the key
+      }
+
       // Shift+M: cycle through modes (only cyclable modes, not school)
       if (key.shift && key.name === 'm') {
         setModeIndex((prev) => (prev + 1) % CYCLABLE_MODES.length)
@@ -143,9 +154,13 @@ export function useAppKeyboard({
             // TODO: Clear conversation history
             return true
           }
+          if (cmd === '/context' || cmd === '/status') {
+            if (setShowStatusPanel) setShowStatusPanel(true)
+            return true
+          }
           if (cmd === '/init' || cmd === '/config' || cmd === '/theme' ||
               cmd === '/doctor' || cmd === '/login' || cmd === '/logout' ||
-              cmd === '/add-dir' || cmd === '/agents' || cmd === '/context') {
+              cmd === '/add-dir' || cmd === '/agents') {
             // TODO: Implement these commands
             return true
           }
@@ -188,7 +203,7 @@ export function useAppKeyboard({
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, smartShortcut, setSmartShortcut],
+    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, smartShortcut, setSmartShortcut],
   )
 
   // Global keyboard handler for Ctrl+C, Ctrl+O, Escape, and backspace

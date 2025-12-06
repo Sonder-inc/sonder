@@ -10,6 +10,7 @@ import { existsSync } from 'fs'
 import { App } from './app'
 import { initializeThemeStore } from './hooks/use-theme'
 import { checkForUpdates, performUpdate } from './utils/updater'
+import { initSonder } from './utils/init'
 
 // Load .env from parent directory
 const envPath = resolve(import.meta.dir, '../../.env')
@@ -92,13 +93,18 @@ async function main(): Promise<void> {
   // Initialize theme store before rendering
   initializeThemeStore()
 
+  // Initialize sonder (user config, tools, agents, MCPs)
+  await initSonder()
+
   const renderer = await createCliRenderer({
     backgroundColor: 'transparent',
     exitOnCtrlC: false,
   })
 
   const version = loadPackageVersion()
-  const launchDir = process.cwd()
+  const fullPath = process.cwd()
+  const parts = fullPath.split('/')
+  const launchDir = parts.slice(-2).join('/')
 
   createRoot(renderer).render(<App initialPrompt={initialPrompt} version={version} launchDir={launchDir} />)
 }

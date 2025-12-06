@@ -1,6 +1,5 @@
 // Re-export from registry
-export { executeTool, availableTools, getToolNames } from './registry'
-export type { ToolName } from './registry'
+export { executeTool, availableTools, getToolNames, initToolRegistry } from './registry'
 
 // Re-export types
 export type { ToolResult, ToolDefinition } from './types'

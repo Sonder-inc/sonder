@@ -13,6 +13,7 @@ import { MessageList } from './components/chat/MessageList'
 import { ShortcutsPanel } from './components/panels/ShortcutsPanel'
 import { CommandPanel } from './components/panels/CommandPanel'
 import { ContextPanel } from './components/panels/ContextPanel'
+import { StatusPanel } from './components/panels/StatusPanel'
 import { Sidebar } from './components/Sidebar'
 import { SystemInfo } from './components/SystemInfo'
 import { MODELS, MODES, MODEL_IDS } from './constants/app-constants'
@@ -31,6 +32,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
   const inputRef = useRef<MultilineInputHandle | null>(null)
   const [modelIndex, setModelIndex] = useState(0)
   const [modeIndex, setModeIndex] = useState(0)
+  const [showStatusPanel, setShowStatusPanel] = useState(false)
 
   const {
     messages,
@@ -120,6 +122,8 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     setModeIndex,
     smartShortcut,
     setSmartShortcut,
+    showStatusPanel,
+    setShowStatusPanel,
   })
 
   // Index of 'school' in the MODES array
@@ -163,6 +167,12 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
 
+        case '/status':
+        case '/context':
+          setShowStatusPanel(true)
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
         case '/config':
         case '/theme':
         case '/doctor':
@@ -170,7 +180,6 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
         case '/logout':
         case '/add-dir':
         case '/agents':
-        case '/context':
           // TODO: Implement these commands
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
@@ -179,7 +188,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
 
     handleSendMessage(trimmed)
     setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex])
+  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel])
 
   useEffect(() => {
     if (initialPrompt && messages.length === 0) {
@@ -274,6 +283,14 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
           {showShortcuts && <ShortcutsPanel />}
           {showCommands && <CommandPanel inputValue={inputValue} selectedIndex={selectedMenuIndex} />}
           {showContext && <ContextPanel inputValue={inputValue} selectedIndex={selectedMenuIndex} />}
+          {showStatusPanel && (
+            <StatusPanel
+              model={MODELS[modelIndex]}
+              modelId={MODEL_IDS[MODELS[modelIndex]]}
+              mode={MODES[modeIndex]}
+              version={version}
+            />
+          )}
 
           <SystemInfo />
         </box>

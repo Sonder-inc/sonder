@@ -26,7 +26,7 @@ export const COMMANDS: readonly Command[] = [
   { name: '/agents', aliases: [], description: 'Manage agent configurations' },
   { name: '/clear', aliases: ['reset', 'new'], description: 'Clear conversation history and free up context' },
   { name: '/config', aliases: ['theme'], description: 'Open config panel' },
-  { name: '/context', aliases: [], description: 'Visualize current context usage as a colored grid' },
+  { name: '/context', aliases: ['status'], description: 'Show context usage, extensions, and session info' },
   { name: '/doctor', aliases: [], description: 'Diagnose and verify your installation and settings' },
   { name: '/exit', aliases: ['quit'], description: 'Exit the REPL' },
   { name: '/init', aliases: [], description: 'Initialize sonder in current directory' },
