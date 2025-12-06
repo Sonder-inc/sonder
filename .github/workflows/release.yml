@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: '0 12 * * *'  # Every day at noon UTC
+  workflow_dispatch:  # Manual trigger
 
 jobs:
   build:
