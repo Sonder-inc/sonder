@@ -9,6 +9,14 @@ import { codeReviewerAgent } from './code-reviewer-agent'
 import { contextPrunerAgent } from './context-pruner-agent'
 import { interrogatorAgent } from './interrogator-agent'
 import { bestOfNAgent } from './best-of-n-agent'
+import { hackerAgent } from './hacker-agent'
+
+// Pentesting agents
+import { nmapAgent } from './nmap-agent'
+import { gobusterAgent } from './gobuster-agent'
+import { searchsploitAgent } from './searchsploit-agent'
+import { niktoAgent } from './nikto-agent'
+import { hydraAgent } from './hydra-agent'
 
 // Using loose type to avoid complex generic variance issues
 type AnyAgentDefinition = AgentDefinition<any, any>
@@ -24,6 +32,13 @@ const builtInAgents: AnyAgentDefinition[] = [
   contextPrunerAgent,
   interrogatorAgent,
   bestOfNAgent,
+  hackerAgent,
+  // Pentesting agents
+  nmapAgent,
+  gobusterAgent,
+  searchsploitAgent,
+  niktoAgent,
+  hydraAgent,
 ]
 
 // Runtime registry (populated on init)
