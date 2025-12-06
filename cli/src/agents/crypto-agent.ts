@@ -1,12 +1,12 @@
 /**
- * Crypto Agent - Cryptography Challenges
+ * Crypto Agent - Cryptography Analysis
  *
- * Analyzes and solves cryptography challenges.
+ * Analyzes and helps solve cryptography challenges.
+ * Uses generator pattern with structured output.
  */
 
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const CRYPTO_SYSTEM_PROMPT = `You are a cryptography analysis agent. You help identify and solve crypto challenges.
 
@@ -36,8 +36,6 @@ const cryptoParams = z.object({
   knownPlaintext: z.string().optional().describe('Known plaintext if available'),
 })
 
-type CryptoParams = z.infer<typeof cryptoParams>
-
 export interface CryptoResult {
   analysis: {
     cipherType: string
@@ -49,60 +47,25 @@ export interface CryptoResult {
   decoded: string | null
 }
 
-export const cryptoAgent = defineAgent<typeof cryptoParams, CryptoResult>({
+export const cryptoAgent = defineGeneratorAgent<typeof cryptoParams, CryptoResult>({
   name: 'crypto',
-  description: 'Analyze and solve cryptography challenges.',
+  id: 'crypto',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Analyzes and helps solve cryptography challenges.',
+
+  spawnerPrompt: 'Analyzes ciphertext to identify cipher types and suggest decryption approaches. Use for crypto CTF challenges.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: CRYPTO_SYSTEM_PROMPT,
+
   parameters: cryptoParams,
 
-  async execute(params: CryptoParams, agentContext): Promise<AgentResult<CryptoResult>> {
-    let userPrompt = `Ciphertext:\n${params.ciphertext}`
-
-    if (params.context) {
-      userPrompt += `\n\nContext: ${params.context}`
-    }
-    if (params.knownPlaintext) {
-      userPrompt += `\n\nKnown plaintext: ${params.knownPlaintext}`
-    }
-
-    const result = await executeAgentLLM({
-      name: 'crypto',
-      systemPrompt: CRYPTO_SYSTEM_PROMPT,
-      userPrompt,
-      context: agentContext,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Crypto analysis failed',
-        data: {
-          analysis: { cipherType: 'unknown', confidence: 'low', patterns: [] },
-          approach: [],
-          tools: [],
-          decoded: null,
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as CryptoResult
-      return {
-        success: true,
-        summary: `${data.analysis.cipherType} (${data.analysis.confidence})${data.decoded ? ' - decoded!' : ''}`,
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse crypto analysis',
-        data: {
-          analysis: { cipherType: 'unknown', confidence: 'low', patterns: [] },
-          approach: [],
-          tools: [],
-          decoded: null,
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM crypto analysis - just run a step
+    yield 'STEP'
   },
 })

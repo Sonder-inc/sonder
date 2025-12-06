@@ -1,6 +1,12 @@
+/**
+ * Interrogator Agent - Clarification Questions
+ *
+ * Identifies ambiguities and generates clarifying questions.
+ * Uses generator pattern with structured output.
+ */
+
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const INTERROGATOR_SYSTEM_PROMPT = `You are a clarification agent. Your job is to identify ambiguities and ask smart follow-up questions.
 
@@ -48,8 +54,6 @@ const interrogatorParams = z.object({
   domain: z.string().optional().describe('Domain context (e.g., "pentesting", "coding")'),
 })
 
-type InterrogatorParams = z.infer<typeof interrogatorParams>
-
 export interface QuestionOption {
   label: string
   description: string
@@ -71,71 +75,25 @@ export interface InterrogatorResult {
   canProceed: boolean
 }
 
-export const interrogatorAgent = defineAgent<typeof interrogatorParams, InterrogatorResult>({
+export const interrogatorAgent = defineGeneratorAgent<typeof interrogatorParams, InterrogatorResult>({
   name: 'interrogator',
-  description: 'Identify ambiguities and generate clarifying questions. Helps refine unclear requests.',
+  id: 'interrogator',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Identifies ambiguities and generates clarifying questions.',
+
+  spawnerPrompt: 'Analyzes user requests to identify ambiguities and generate targeted clarifying questions. Use to refine unclear requirements.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: INTERROGATOR_SYSTEM_PROMPT,
+
   parameters: interrogatorParams,
 
-  async execute(params: InterrogatorParams, agentContext): Promise<AgentResult<InterrogatorResult>> {
-    let userPrompt = `User request: "${params.userRequest}"`
-
-    if (params.domain) {
-      userPrompt += `\n\nDomain: ${params.domain}`
-    }
-
-    if (params.previousContext) {
-      userPrompt += `\n\nPrevious context:\n${params.previousContext}`
-    }
-
-    userPrompt += '\n\nIdentify ambiguities and generate clarifying questions.'
-
-    const result = await executeAgentLLM({
-      name: 'interrogator',
-      systemPrompt: INTERROGATOR_SYSTEM_PROMPT,
-      userPrompt,
-      context: agentContext,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Analysis failed',
-        data: {
-          understanding: '',
-          ambiguities: [],
-          questions: [],
-          assumptions: [],
-          canProceed: true, // default to proceeding if analysis fails
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as InterrogatorResult
-      const highPriority = data.questions.filter(q => q.priority === 'high').length
-
-      return {
-        success: true,
-        summary: highPriority > 0
-          ? `${highPriority} critical question${highPriority !== 1 ? 's' : ''}`
-          : data.canProceed
-            ? 'Clear enough to proceed'
-            : `${data.questions.length} question${data.questions.length !== 1 ? 's' : ''}`,
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse analysis',
-        data: {
-          understanding: result.text,
-          ambiguities: [],
-          questions: [],
-          assumptions: [],
-          canProceed: true,
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM analysis - just run a step
+    yield 'STEP'
   },
 })

@@ -1,95 +1,92 @@
 /**
- * Commander Agent - Shell Command Execution
+ * Commander Agent - Shell Command Execution with LLM Analysis
  *
- * Executes shell commands with safety checks.
+ * Uses generator-based handleSteps pattern (codebuff architecture).
+ * Executes shell commands via run_terminal_command tool, then
+ * lets the LLM analyze and summarize the output.
  */
 
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { exec } from 'node:child_process'
-import { promisify } from 'node:util'
-
-const execAsync = promisify(exec)
-
-const DANGEROUS_PATTERNS = [
-  /rm\s+-rf\s+[\/~]/,
-  /mkfs/,
-  /dd\s+if=.*of=\/dev/,
-  />\s*\/dev\/sd/,
-  /chmod\s+-R\s+777\s+\//,
-  /:\(\)\s*\{\s*:\|:&\s*\};\s*:/,  // fork bomb
-]
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const commanderParams = z.object({
   command: z.string().describe('Shell command to execute'),
-  cwd: z.string().optional().describe('Working directory'),
-  timeout: z.number().optional().default(30000).describe('Timeout in ms'),
+  prompt: z.string().optional().describe('What information from the output is desired'),
+  working_directory: z.string().optional().describe('Working directory for command'),
+  timeout_seconds: z.number().optional().default(30).describe('Timeout in seconds (-1 for no timeout)'),
 })
 
-type CommanderParams = z.infer<typeof commanderParams>
-
-export interface CommanderResult {
-  command: string
-  stdout: string
-  stderr: string
-  exitCode: number
-}
-
-export const commanderAgent = defineAgent<typeof commanderParams, CommanderResult>({
+export const commanderAgent = defineGeneratorAgent({
   name: 'commander',
-  description: 'Execute shell commands. Use for running tools, scripts, and system operations.',
-  systemPrompt: '',
+  id: 'commander',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Runs a terminal command and analyzes its output',
+
+  spawnerPrompt:
+    'Runs a single terminal command and describes its output based on what information is requested. Use when you need to execute shell commands and get intelligent analysis of the results.',
+
+  inputSchema: {
+    prompt: {
+      type: 'string',
+      description: 'What information from the command output is desired. Be specific about what to look for or extract.',
+    },
+    params: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Terminal command to run' },
+        working_directory: { type: 'string', description: 'Working directory for command' },
+        timeout_seconds: { type: 'number', description: 'Timeout in seconds (-1 for no timeout, default 30)' },
+      },
+      required: ['command'],
+    },
+  },
+
+  outputMode: 'last_message',
+  toolNames: ['run_terminal_command'],
+
+  systemPrompt: `You are an expert at analyzing the output of terminal commands.
+
+Your job is to:
+1. Review the terminal command and its output
+2. Analyze the output based on what the user requested
+3. Provide a clear, concise description of the relevant information
+
+When describing command output:
+- Use excerpts from the actual output when possible (especially for errors, key values, or specific data)
+- Focus on the information the user requested
+- Be concise but thorough
+- If the output is very long, summarize the key points rather than reproducing everything
+- Don't include any follow up recommendations, suggestions, or offers to help`,
+
+  instructionsPrompt: `The user has provided a command to run and specified what information they want from the output.
+
+Run the command and then describe the relevant information from the output, following the user's instructions about what to focus on.
+
+Do not use any tools! Only analyze the output of the command.`,
+
   parameters: commanderParams,
 
-  async execute(params: CommanderParams): Promise<AgentResult<CommanderResult>> {
-    // Safety check
-    for (const pattern of DANGEROUS_PATTERNS) {
-      if (pattern.test(params.command)) {
-        return {
-          success: false,
-          summary: 'Blocked: dangerous command',
-          data: {
-            command: params.command,
-            stdout: '',
-            stderr: 'Command blocked for safety',
-            exitCode: 1,
-          },
-        }
-      }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    const { command, working_directory, timeout_seconds } = params as z.infer<typeof commanderParams>
+
+    if (!command) {
+      return
     }
 
-    try {
-      const { stdout, stderr } = await execAsync(params.command, {
-        cwd: params.cwd,
-        timeout: params.timeout,
-        maxBuffer: 10 * 1024 * 1024, // 10MB
-      })
-
-      const truncatedStdout = stdout.length > 5000
-        ? stdout.slice(0, 5000) + '\n...[truncated]'
-        : stdout
-
-      return {
-        success: true,
-        summary: stdout ? `Output: ${stdout.split('\n')[0].slice(0, 50)}...` : 'Command completed',
-        data: {
-          command: params.command,
-          stdout: truncatedStdout,
-          stderr,
-          exitCode: 0,
-        },
-      }
-    } catch (err: any) {
-      return {
-        success: false,
-        summary: err.message?.slice(0, 100) || 'Command failed',
-        data: {
-          command: params.command,
-          stdout: err.stdout || '',
-          stderr: err.stderr || err.message || '',
-          exitCode: err.code || 1,
-        },
-      }
+    // Step 1: Execute the terminal command
+    yield {
+      toolName: 'run_terminal_command',
+      input: {
+        command,
+        working_directory,
+        timeout_seconds,
+      },
     }
+
+    // Step 2: Let the LLM analyze and describe the output
+    yield 'STEP'
   },
 })

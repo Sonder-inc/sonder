@@ -1,6 +1,12 @@
+/**
+ * Researcher Web Agent - Web Research Synthesis
+ *
+ * Analyzes search results and web content to synthesize findings.
+ * Uses generator pattern with structured output.
+ */
+
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const RESEARCHER_SYSTEM_PROMPT = `You are a web research agent. Given search results or web content, you:
 
@@ -26,8 +32,6 @@ const researcherParams = z.object({
   webContent: z.string().optional().describe('Scraped web page content'),
 })
 
-type ResearcherParams = z.infer<typeof researcherParams>
-
 export interface ResearchSource {
   title: string
   url: string
@@ -42,67 +46,25 @@ export interface ResearcherResult {
   nextSteps: string[]
 }
 
-export const searchFetchAgent = defineAgent<typeof researcherParams, ResearcherResult>({
+export const searchFetchAgent = defineGeneratorAgent<typeof researcherParams, ResearcherResult>({
   name: 'search_fetch',
-  description: 'Search the web and fetch content. Analyzes results and synthesizes findings.',
+  id: 'search_fetch',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Analyzes search results and synthesizes web research findings.',
+
+  spawnerPrompt: 'Synthesizes web search results and content into actionable insights. Use for research tasks requiring web information.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: RESEARCHER_SYSTEM_PROMPT,
+
   parameters: researcherParams,
 
-  async execute(params: ResearcherParams, context): Promise<AgentResult<ResearcherResult>> {
-    let userPrompt = `Research query: "${params.query}"`
-
-    if (params.searchResults) {
-      userPrompt += `\n\nSearch results:\n${params.searchResults}`
-    }
-
-    if (params.webContent) {
-      const truncated = params.webContent.length > 5000
-        ? params.webContent.slice(0, 5000) + '\n...[truncated]'
-        : params.webContent
-      userPrompt += `\n\nWeb content:\n${truncated}`
-    }
-
-    const result = await executeAgentLLM({
-      name: 'search_fetch',
-      systemPrompt: RESEARCHER_SYSTEM_PROMPT,
-      userPrompt,
-      context,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Research failed',
-        data: {
-          summary: '',
-          keyPoints: [],
-          sources: [],
-          caveats: [],
-          nextSteps: [],
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as ResearcherResult
-
-      return {
-        success: true,
-        summary: data.summary.slice(0, 100),
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse research',
-        data: {
-          summary: result.text,
-          keyPoints: [],
-          sources: [],
-          caveats: [],
-          nextSteps: [],
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM synthesis - just run a step
+    yield 'STEP'
   },
 })

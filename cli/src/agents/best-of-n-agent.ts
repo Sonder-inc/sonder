@@ -1,6 +1,12 @@
+/**
+ * Best-of-N Agent - Solution Evaluation
+ *
+ * Evaluates multiple candidate solutions and selects the best one.
+ * Uses generator pattern with structured output.
+ */
+
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const BEST_OF_N_SYSTEM_PROMPT = `You are a solution evaluation agent. Given multiple candidate solutions, you:
 
@@ -49,8 +55,6 @@ const bestOfNParams = z.object({
   criteria: z.array(z.string()).optional().describe('Custom evaluation criteria'),
 })
 
-type BestOfNParams = z.infer<typeof bestOfNParams>
-
 export interface CandidateEvaluation {
   candidateIndex: number
   scores: {
@@ -75,61 +79,25 @@ export interface BestOfNResult {
   recommendation: string
 }
 
-export const bestOfNAgent = defineAgent<typeof bestOfNParams, BestOfNResult>({
+export const bestOfNAgent = defineGeneratorAgent<typeof bestOfNParams, BestOfNResult>({
   name: 'best_of_n',
-  description: 'Evaluate multiple candidate solutions and select the best one. Useful for comparing approaches.',
+  id: 'best_of_n',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Evaluate multiple candidate solutions and select the best one.',
+
+  spawnerPrompt: 'Evaluates multiple candidate solutions against criteria and selects the best one. Useful for comparing different approaches or implementations.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: BEST_OF_N_SYSTEM_PROMPT,
+
   parameters: bestOfNParams,
 
-  async execute(params: BestOfNParams, agentContext): Promise<AgentResult<BestOfNResult>> {
-    let userPrompt = `Task: ${params.task}\n\nCandidates to evaluate:\n`
-
-    params.candidates.forEach((candidate, i) => {
-      userPrompt += `\n--- Candidate ${i + 1} ---\n${candidate}\n`
-    })
-
-    if (params.criteria && params.criteria.length > 0) {
-      userPrompt += `\n\nAdditional evaluation criteria: ${params.criteria.join(', ')}`
-    }
-
-    const result = await executeAgentLLM({
-      name: 'best_of_n',
-      systemPrompt: BEST_OF_N_SYSTEM_PROMPT,
-      userPrompt,
-      context: agentContext,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Evaluation failed',
-        data: {
-          evaluations: [],
-          winner: { index: 0, justification: 'Evaluation failed' },
-          recommendation: 'Could not evaluate candidates',
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as BestOfNResult
-      const winnerScore = data.evaluations[data.winner.index]?.totalScore || 0
-
-      return {
-        success: true,
-        summary: `Candidate ${data.winner.index + 1} wins (${winnerScore}/50)`,
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse evaluation',
-        data: {
-          evaluations: [],
-          winner: { index: 0, justification: result.text },
-          recommendation: 'Parse error',
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM evaluation - just run a step
+    yield 'STEP'
   },
 })

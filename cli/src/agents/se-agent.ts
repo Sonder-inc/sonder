@@ -1,12 +1,12 @@
 /**
- * SE Agent - Social Engineering
+ * SE Agent - Social Engineering Analysis
  *
- * Analyzes and helps with social engineering challenges.
+ * Analyzes social engineering challenges (educational/CTF).
+ * Uses generator pattern with structured output.
  */
 
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const SE_SYSTEM_PROMPT = `You are a social engineering analysis agent for CTF/educational purposes. You analyze SE challenges.
 
@@ -36,8 +36,6 @@ const seParams = z.object({
   goal: z.string().optional().describe('What information or access is needed'),
 })
 
-type SEParams = z.infer<typeof seParams>
-
 export interface SEResult {
   scenario: string
   targetInfo: string[]
@@ -47,64 +45,25 @@ export interface SEResult {
   defense: string[]
 }
 
-export const seAgent = defineAgent<typeof seParams, SEResult>({
+export const seAgent = defineGeneratorAgent<typeof seParams, SEResult>({
   name: 'se',
-  description: 'Analyze social engineering challenges (educational/CTF).',
+  id: 'se',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Analyzes social engineering challenges (educational/CTF).',
+
+  spawnerPrompt: 'Analyzes social engineering scenarios for CTF/educational purposes. Focuses on OSINT and defensive understanding.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: SE_SYSTEM_PROMPT,
+
   parameters: seParams,
 
-  async execute(params: SEParams, context): Promise<AgentResult<SEResult>> {
-    let userPrompt = `Scenario: ${params.scenario}`
-
-    if (params.targetInfo) {
-      userPrompt += `\n\nKnown info: ${params.targetInfo}`
-    }
-    if (params.goal) {
-      userPrompt += `\n\nGoal: ${params.goal}`
-    }
-
-    const result = await executeAgentLLM({
-      name: 'se',
-      systemPrompt: SE_SYSTEM_PROMPT,
-      userPrompt,
-      context,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'SE analysis failed',
-        data: {
-          scenario: params.scenario,
-          targetInfo: [],
-          approach: [],
-          osintSources: [],
-          redFlags: [],
-          defense: [],
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as SEResult
-      return {
-        success: true,
-        summary: `${data.approach.length} approaches, ${data.osintSources.length} OSINT sources`,
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse SE analysis',
-        data: {
-          scenario: params.scenario,
-          targetInfo: [],
-          approach: [],
-          osintSources: [],
-          redFlags: [],
-          defense: [],
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM SE analysis - just run a step
+    yield 'STEP'
   },
 })

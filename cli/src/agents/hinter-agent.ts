@@ -1,12 +1,12 @@
 /**
- * Hinter Agent - Hints Without Spoilers
+ * Hinter Agent - Progressive Hints Without Spoilers
  *
  * Provides progressive hints for CTF/HTB/THM challenges.
+ * Uses generator pattern with structured output.
  */
 
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const HINTER_SYSTEM_PROMPT = `You are a hint agent for CTF/pentesting challenges. You provide progressive hints without spoilers.
 
@@ -32,8 +32,6 @@ const hinterParams = z.object({
   hintLevel: z.number().optional().default(1).describe('How specific (1=vague, 5=almost answer)'),
 })
 
-type HinterParams = z.infer<typeof hinterParams>
-
 export interface HinterResult {
   hint: string
   hintLevel: number
@@ -41,47 +39,25 @@ export interface HinterResult {
   nextHint: string
 }
 
-export const hinterAgent = defineAgent<typeof hinterParams, HinterResult>({
+export const hinterAgent = defineGeneratorAgent<typeof hinterParams, HinterResult>({
   name: 'hinter',
-  description: 'Provide progressive hints for challenges without spoilers.',
+  id: 'hinter',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Provides progressive hints for CTF challenges without spoilers.',
+
+  spawnerPrompt: 'Gives progressive hints for CTF/pentesting challenges without revealing answers. Use when stuck on a challenge.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: HINTER_SYSTEM_PROMPT,
+
   parameters: hinterParams,
 
-  async execute(params: HinterParams, context): Promise<AgentResult<HinterResult>> {
-    let userPrompt = `Challenge: ${params.challenge}\nHint level requested: ${params.hintLevel}/5`
-
-    if (params.previousHints?.length) {
-      userPrompt += `\n\nPrevious hints given:\n${params.previousHints.map((h, i) => `${i + 1}. ${h}`).join('\n')}`
-    }
-
-    const result = await executeAgentLLM({
-      name: 'hinter',
-      systemPrompt: HINTER_SYSTEM_PROMPT,
-      userPrompt,
-      context,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Failed to generate hint',
-        data: { hint: '', hintLevel: 1, category: 'misc', nextHint: '' },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as HinterResult
-      return {
-        success: true,
-        summary: `Level ${data.hintLevel} hint (${data.category})`,
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse hint',
-        data: { hint: result.text, hintLevel: 1, category: 'misc', nextHint: '' },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM hint generation - just run a step
+    yield 'STEP'
   },
 })

@@ -6,16 +6,11 @@
  * - Correlates service fingerprints with known vulnerabilities
  * - Prioritizes by exploitability and relevance
  *
- * Inspired by MorphLLM's WarpGrep architecture:
- * - Combines grep (exact) + semantic (conceptual) search
- * - Budget-aware: max parallel searches to avoid context rot
- * - Returns prioritized, actionable results
+ * Uses generator pattern with run_vuln_search tool.
  */
 
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
-import { executeProcess } from '../utils/process-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const VGREP_SYSTEM_PROMPT = `You are VGrep, a semantic vulnerability search agent. You combine exact pattern matching with semantic understanding to find relevant exploits, CVEs, and attack vectors.
 
@@ -61,8 +56,7 @@ Output format (JSON):
     {
       "name": "apache-paths.txt",
       "path": "/usr/share/seclists/Discovery/Web-Content/apache.txt",
-      "relevance": "directory enumeration for apache",
-      "entries": 1500
+      "relevance": "directory enumeration for apache"
     }
   ],
   "attack_vectors": [
@@ -73,17 +67,8 @@ Output format (JSON):
       "difficulty": "easy"
     }
   ],
-  "recommendations": [
-    "Start with CVE-2021-41773 - trivial RCE if mod_cgi is enabled",
-    "Use nuclei template for quick verification",
-    "Metasploit module handles exploitation automatically"
-  ],
-  "confidence": 0.95,
-  "search_stats": {
-    "sources_queried": 3,
-    "total_results": 15,
-    "filtered_results": 5
-  }
+  "recommendations": ["Start with CVE-2021-41773 - trivial RCE if mod_cgi is enabled"],
+  "confidence": 0.95
 }
 
 Prioritization rules:
@@ -96,7 +81,7 @@ Prioritization rules:
 Only output JSON, nothing else.`
 
 const vgrepParams = z.object({
-  query: z.string().describe('Semantic search query (e.g., "apache 2.4 rce", "wordpress auth bypass", "ftp anonymous login exploit")'),
+  query: z.string().describe('Semantic search query (e.g., "apache 2.4 rce", "wordpress auth bypass")'),
   services: z.array(z.object({
     name: z.string(),
     version: z.string().optional(),
@@ -106,14 +91,10 @@ const vgrepParams = z.object({
   vulnTypes: z.array(z.enum(['rce', 'lfi', 'sqli', 'xss', 'auth_bypass', 'info_disclosure', 'dos', 'privesc', 'any']))
     .optional().default(['any'])
     .describe('Types of vulnerabilities to search for'),
-  sources: z.array(z.enum(['exploit-db', 'cve', 'seclists', 'nuclei', 'all']))
+  sources: z.array(z.enum(['searchsploit', 'seclists', 'nuclei', 'all']))
     .optional().default(['all'])
     .describe('Sources to search'),
-  maxResults: z.number().optional().default(10)
-    .describe('Maximum results per category'),
 })
-
-type VgrepParams = z.infer<typeof vgrepParams>
 
 export interface VgrepVulnerability {
   id: string
@@ -127,29 +108,6 @@ export interface VgrepVulnerability {
   references: string[]
 }
 
-export interface VgrepExploit {
-  source: string
-  id: string
-  title: string
-  path: string
-  verified: boolean
-  language?: string
-}
-
-export interface VgrepWordlist {
-  name: string
-  path: string
-  relevance: string
-  entries?: number
-}
-
-export interface VgrepAttackVector {
-  technique: string
-  steps: string[]
-  tools: string[]
-  difficulty: string
-}
-
 export interface VgrepResult {
   query_understanding: {
     service?: string
@@ -158,186 +116,64 @@ export interface VgrepResult {
     keywords: string[]
   }
   vulnerabilities: VgrepVulnerability[]
-  exploits: VgrepExploit[]
-  wordlists: VgrepWordlist[]
-  attack_vectors: VgrepAttackVector[]
+  exploits: Array<{ source: string; id: string; title: string; path: string; verified: boolean; language?: string }>
+  wordlists: Array<{ name: string; path: string; relevance: string }>
+  attack_vectors: Array<{ technique: string; steps: string[]; tools: string[]; difficulty: string }>
   recommendations: string[]
   confidence: number
-  search_stats: {
-    sources_queried: number
-    total_results: number
-    filtered_results: number
-  }
-  rawOutput?: string
 }
 
-const EMPTY_RESULT: VgrepResult = {
-  query_understanding: { keywords: [] },
-  vulnerabilities: [],
-  exploits: [],
-  wordlists: [],
-  attack_vectors: [],
-  recommendations: [],
-  confidence: 0,
-  search_stats: { sources_queried: 0, total_results: 0, filtered_results: 0 },
-}
-
-/**
- * Run searchsploit and capture output
- */
-async function runSearchsploit(query: string): Promise<string> {
-  const result = await executeProcess('searchsploit', ['-w', '--exclude=dos', query], {
-    timeoutMs: 15000,
-    toolName: 'searchsploit',
-  })
-  return result.success ? result.output : ''
-}
-
-/**
- * Search SecLists for relevant wordlists
- */
-async function searchSeclists(keywords: string[]): Promise<string> {
-  const seclistsPath = '/usr/share/seclists'
-  const results: string[] = []
-
-  for (const keyword of keywords.slice(0, 3)) { // Limit parallel searches
-    const result = await executeProcess('find', [
-      seclistsPath,
-      '-type', 'f',
-      '-iname', `*${keyword}*`,
-      '-o', '-ipath', `*${keyword}*`,
-    ], {
-      timeoutMs: 5000,
-      toolName: 'find-seclists',
-    })
-    if (result.success && result.output) {
-      results.push(result.output)
-    }
-  }
-
-  return results.join('\n')
-}
-
-/**
- * Search nuclei templates
- */
-async function searchNucleiTemplates(query: string): Promise<string> {
-  const result = await executeProcess('nuclei', [
-    '-tl', // Template list
-    '-tags', query.toLowerCase().replace(/\s+/g, ','),
-  ], {
-    timeoutMs: 10000,
-    toolName: 'nuclei-templates',
-  })
-  return result.success ? result.output : ''
-}
-
-export const vgrepAgent = defineAgent<typeof vgrepParams, VgrepResult>({
+export const vgrepAgent = defineGeneratorAgent<typeof vgrepParams, VgrepResult>({
   name: 'vgrep',
-  description: 'Semantic vulnerability search. Finds CVEs, exploits, wordlists, and attack vectors for services/software. Like WarpGrep but for pentesting.',
+  id: 'vgrep',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Semantic vulnerability search. Finds CVEs, exploits, wordlists, and attack vectors.',
+
+  spawnerPrompt: 'Searches for vulnerabilities using semantic understanding. Finds CVEs, exploits, wordlists, and attack vectors for services/software. Use for vulnerability research.',
+
+  outputMode: 'structured_output',
+  toolNames: ['run_vuln_search'],
+
   systemPrompt: VGREP_SYSTEM_PROMPT,
+
+  instructionsPrompt: `Analyze the search results and correlate findings into actionable vulnerability intelligence.
+
+Focus on:
+1. Understanding what the user is searching for
+2. Identifying relevant CVEs and their severity
+3. Finding available exploits (prioritize verified/Metasploit)
+4. Suggesting attack vectors and next steps
+5. Providing confidence score based on result quality`,
+
   parameters: vgrepParams,
 
-  async execute(params: VgrepParams, context): Promise<AgentResult<VgrepResult>> {
-    // Build search queries from params
-    const searchQueries: string[] = [params.query]
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    const { query, services, sources } = params as z.infer<typeof vgrepParams>
 
-    // Add service-specific queries
-    if (params.services?.length) {
-      for (const svc of params.services) {
+    // Build search keywords
+    const keywords = query.split(/\s+/)
+    if (services?.length) {
+      for (const svc of services) {
         if (svc.version) {
-          searchQueries.push(`${svc.name} ${svc.version}`)
-        } else {
-          searchQueries.push(svc.name)
+          keywords.push(`${svc.name} ${svc.version}`)
         }
       }
     }
 
-    // Run parallel searches (budget: max 4 concurrent)
-    const searches = await Promise.all([
-      // SearchSploit for exploits
-      runSearchsploit(searchQueries[0]),
-      // SecLists for wordlists
-      searchSeclists(searchQueries[0].split(/\s+/)),
-      // Nuclei templates (if available)
-      params.sources.includes('all') || params.sources.includes('nuclei')
-        ? searchNucleiTemplates(searchQueries[0])
-        : Promise.resolve(''),
-    ])
-
-    const [searchsploitOutput, seclistsOutput, nucleiOutput] = searches
-
-    // Combine all outputs for LLM analysis
-    const combinedOutput = [
-      '=== SEARCHSPLOIT RESULTS ===',
-      searchsploitOutput || 'No results',
-      '',
-      '=== SECLISTS MATCHES ===',
-      seclistsOutput || 'No matches',
-      '',
-      '=== NUCLEI TEMPLATES ===',
-      nucleiOutput || 'Not available',
-    ].join('\n')
-
-    // Build context for LLM
-    let userPrompt = `Query: "${params.query}"`
-
-    if (params.services?.length) {
-      userPrompt += '\n\nTarget services:\n'
-      for (const svc of params.services) {
-        userPrompt += `- ${svc.name}${svc.version ? ` ${svc.version}` : ''}${svc.port ? ` (port ${svc.port})` : ''}\n`
-        if (svc.banner) userPrompt += `  Banner: ${svc.banner}\n`
-      }
+    // Step 1: Run vulnerability search
+    yield {
+      toolName: 'run_vuln_search',
+      input: {
+        query,
+        keywords: [...new Set(keywords)],
+        sources,
+      },
     }
 
-    if (params.vulnTypes && !params.vulnTypes.includes('any')) {
-      userPrompt += `\nFilter by vulnerability types: ${params.vulnTypes.join(', ')}`
-    }
-
-    userPrompt += `\n\nSearch results:\n${combinedOutput}`
-
-    // Run LLM analysis
-    const result = await executeAgentLLM({
-      name: 'vgrep',
-      systemPrompt: VGREP_SYSTEM_PROMPT,
-      userPrompt,
-      context,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'VGrep search failed',
-        data: { ...EMPTY_RESULT, rawOutput: combinedOutput },
-      }
-    }
-
-    try {
-      const parsed = JSON.parse(result.text) as VgrepResult
-
-      // Build summary
-      const vulnCount = parsed.vulnerabilities.length
-      const exploitCount = parsed.exploits.length
-      const criticalCount = parsed.vulnerabilities.filter(v => v.severity === 'critical').length
-
-      const summaryParts = [
-        `Found ${vulnCount} vulnerabilities`,
-        criticalCount > 0 ? `(${criticalCount} critical)` : '',
-        exploitCount > 0 ? `${exploitCount} exploits` : '',
-        parsed.recommendations[0] ? `Top: ${parsed.recommendations[0].slice(0, 50)}...` : '',
-      ].filter(Boolean)
-
-      return {
-        success: true,
-        summary: summaryParts.join(', '),
-        data: parsed,
-      }
-    } catch {
-      return {
-        success: true,
-        summary: 'VGrep complete (parse failed)',
-        data: { ...EMPTY_RESULT, rawOutput: combinedOutput },
-      }
-    }
+    // Step 2: Analyze and correlate findings
+    yield 'STEP'
   },
 })

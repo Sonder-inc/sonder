@@ -1,6 +1,12 @@
+/**
+ * Context Pruner Agent - Context Optimization
+ *
+ * Compresses and optimizes context for LLM calls.
+ * Uses generator pattern with structured output.
+ */
+
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const CONTEXT_PRUNER_SYSTEM_PROMPT = `You are a context optimization agent. Your job is to compress and prioritize context for LLM calls.
 
@@ -34,8 +40,6 @@ const contextPrunerParams = z.object({
   maxTokens: z.number().optional().default(4000).describe('Target token limit'),
 })
 
-type ContextPrunerParams = z.infer<typeof contextPrunerParams>
-
 export interface ContextPrunerResult {
   prunedContext: string
   removedSections: string[]
@@ -44,67 +48,25 @@ export interface ContextPrunerResult {
   tokenEstimate: number
 }
 
-export const compactAgent = defineAgent<typeof contextPrunerParams, ContextPrunerResult>({
+export const compactAgent = defineGeneratorAgent<typeof contextPrunerParams, ContextPrunerResult>({
   name: 'compact',
-  description: 'Compress and optimize context for LLM calls. Reduces token usage while preserving critical info.',
+  id: 'compact',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Compresses and optimizes context for LLM calls.',
+
+  spawnerPrompt: 'Compresses large contexts while preserving critical information. Use to reduce token usage before expensive LLM calls.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: CONTEXT_PRUNER_SYSTEM_PROMPT,
+
   parameters: contextPrunerParams,
 
-  async execute(params: ContextPrunerParams, agentContext): Promise<AgentResult<ContextPrunerResult>> {
-    const userPrompt = `Current task: ${params.currentTask}
-Target max tokens: ${params.maxTokens}
-
-Context to prune:
----
-${params.context}
----
-
-Compress this context while preserving information critical to the current task.`
-
-    const result = await executeAgentLLM({
-      name: 'compact',
-      systemPrompt: CONTEXT_PRUNER_SYSTEM_PROMPT,
-      userPrompt,
-      context: agentContext,
-    })
-
-    if (!result.success) {
-      // On failure, return original context truncated
-      const truncated = params.context.slice(0, params.maxTokens * 4) // rough char estimate
-      return {
-        success: false,
-        summary: 'Pruning failed, using truncation',
-        data: {
-          prunedContext: truncated,
-          removedSections: [],
-          preservedCritical: [],
-          compressionRatio: truncated.length / params.context.length,
-          tokenEstimate: Math.floor(truncated.length / 4),
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as ContextPrunerResult
-      const ratio = Math.round(data.compressionRatio * 100)
-
-      return {
-        success: true,
-        summary: `${ratio}% compression, ~${data.tokenEstimate} tokens`,
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse pruned context',
-        data: {
-          prunedContext: params.context.slice(0, params.maxTokens * 4),
-          removedSections: [],
-          preservedCritical: [],
-          compressionRatio: 1,
-          tokenEstimate: params.maxTokens,
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM compression - just run a step
+    yield 'STEP'
   },
 })

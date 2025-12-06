@@ -2,12 +2,11 @@
  * Council Agent - Agent Picker/Orchestrator
  *
  * Decides which agent(s) to use for a given task.
- * Uses rich schema info to properly infer parameters.
+ * Uses generator pattern with structured output.
  */
 
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 import { getAgentSchemas } from './registry'
 
 /**
@@ -21,7 +20,7 @@ function buildCouncilPrompt(): string {
       const paramList = Object.entries(info.params)
         .map(([key, desc]) => `    ${key}: ${desc}`)
         .join('\n')
-      return `- ${name}: ${info.description}\n  params:\n${paramList || '    (none)'}`
+      return `- ${name}: ${info.spawnerPrompt || info.description}\n  params:\n${paramList || '    (none)'}`
     })
     .join('\n\n')
 
@@ -55,8 +54,6 @@ const councilParams = z.object({
   constraints: z.array(z.string()).optional().describe('Any constraints or preferences'),
 })
 
-type CouncilParams = z.infer<typeof councilParams>
-
 export interface CouncilResult {
   understanding: string
   selectedAgents: string[]
@@ -65,62 +62,39 @@ export interface CouncilResult {
   parameters: Record<string, unknown>
 }
 
-export const councilAgent = defineAgent<typeof councilParams, CouncilResult>({
+export const councilAgent = defineGeneratorAgent<typeof councilParams, CouncilResult>({
   name: 'council',
+  id: 'council',
+  model: 'anthropic/claude-3.5-haiku',
+
   description: 'Agent picker/orchestrator. Decides which agents to use for a task.',
-  systemPrompt: '', // Dynamic, built at runtime
+
+  spawnerPrompt: 'Internal orchestration agent that analyzes tasks and selects the best agents to handle them.',
+
+  outputMode: 'structured_output',
+  outputSchema: {
+    type: 'object',
+    properties: {
+      understanding: { type: 'string' },
+      selectedAgents: { type: 'array', items: { type: 'string' } },
+      reasoning: { type: 'string' },
+      executionOrder: { type: 'string', enum: ['parallel', 'sequential'] },
+      parameters: { type: 'object' },
+    },
+    required: ['understanding', 'selectedAgents', 'reasoning', 'executionOrder', 'parameters'],
+  },
+
+  // Dynamic system prompt built at runtime
+  get systemPrompt() {
+    return buildCouncilPrompt()
+  },
+
   parameters: councilParams,
 
-  async execute(params: CouncilParams, context): Promise<AgentResult<CouncilResult>> {
-    // Build dynamic prompt with current agent schemas
-    const systemPrompt = buildCouncilPrompt()
-
-    const userPrompt = `Task: ${params.task}${
-      params.constraints?.length ? `\nConstraints: ${params.constraints.join(', ')}` : ''
-    }${
-      context.conversationContext ? `\n\nContext:\n${context.conversationContext}` : ''
-    }`
-
-    const result = await executeAgentLLM({
-      name: 'council',
-      systemPrompt,
-      userPrompt,
-      context,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Council decision failed',
-        data: {
-          understanding: '',
-          selectedAgents: [],
-          reasoning: 'Failed to decide',
-          executionOrder: 'sequential',
-          parameters: {},
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as CouncilResult
-      return {
-        success: true,
-        summary: `${data.selectedAgents.join('+')} → ${data.understanding.slice(0, 50)}`,
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse council decision',
-        data: {
-          understanding: '',
-          selectedAgents: [],
-          reasoning: result.text,
-          executionOrder: 'sequential',
-          parameters: {},
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Council is pure LLM inference - just run a step
+    yield 'STEP'
   },
 })

@@ -1,6 +1,12 @@
+/**
+ * Code Reviewer Agent - Security-Focused Code Review
+ *
+ * Analyzes code for security vulnerabilities, bugs, and best practices.
+ * Uses generator pattern with structured output.
+ */
+
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const CODE_REVIEWER_SYSTEM_PROMPT = `You are a security-focused code reviewer. Analyze code for:
 
@@ -40,8 +46,6 @@ const codeReviewerParams = z.object({
   focusAreas: z.array(z.string()).optional().describe('Specific areas to focus on'),
 })
 
-type CodeReviewerParams = z.infer<typeof codeReviewerParams>
-
 export interface CodeIssue {
   type: 'security' | 'bug' | 'performance' | 'style'
   severity: 'critical' | 'high' | 'medium' | 'low'
@@ -57,70 +61,25 @@ export interface CodeReviewerResult {
   approved: boolean
 }
 
-export const codeReviewerAgent = defineAgent<typeof codeReviewerParams, CodeReviewerResult>({
+export const codeReviewerAgent = defineGeneratorAgent<typeof codeReviewerParams, CodeReviewerResult>({
   name: 'reviewer',
-  description: 'Review code, plans, or approaches. Identifies issues, suggests improvements, validates correctness.',
+  id: 'reviewer',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Security-focused code review. Identifies vulnerabilities, bugs, and suggests improvements.',
+
+  spawnerPrompt: 'Reviews code for security issues, bugs, and best practice violations. Use for validating code quality and security.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: CODE_REVIEWER_SYSTEM_PROMPT,
+
   parameters: codeReviewerParams,
 
-  async execute(params: CodeReviewerParams, agentContext): Promise<AgentResult<CodeReviewerResult>> {
-    let userPrompt = 'Review this code:\n\n```'
-    if (params.language) userPrompt += params.language
-    userPrompt += `\n${params.code}\n\`\`\``
-
-    if (params.context) {
-      userPrompt += `\n\nContext: ${params.context}`
-    }
-
-    if (params.focusAreas && params.focusAreas.length > 0) {
-      userPrompt += `\n\nFocus on: ${params.focusAreas.join(', ')}`
-    }
-
-    const result = await executeAgentLLM({
-      name: 'reviewer',
-      systemPrompt: CODE_REVIEWER_SYSTEM_PROMPT,
-      userPrompt,
-      context: agentContext,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Review failed',
-        data: {
-          severity: 'info',
-          issues: [],
-          summary: 'Could not complete review',
-          approved: false,
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as CodeReviewerResult
-      const issueCount = data.issues.length
-      const criticalCount = data.issues.filter(i => i.severity === 'critical').length
-
-      return {
-        success: true,
-        summary: criticalCount > 0
-          ? `${criticalCount} critical issues`
-          : issueCount > 0
-            ? `${issueCount} issue${issueCount !== 1 ? 's' : ''}`
-            : 'No issues found',
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse review',
-        data: {
-          severity: 'info',
-          issues: [],
-          summary: result.text,
-          approved: false,
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM analysis - just run a step
+    yield 'STEP'
   },
 })

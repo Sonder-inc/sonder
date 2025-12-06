@@ -6,12 +6,12 @@
  *
  * Input: "Apache/2.4.49", "vsftpd 2.3.4", "OpenSSH 7.2p2"
  * Output: Prioritized exploits, Metasploit modules, attack chains
+ *
+ * Uses generator pattern with run_exploit_match tool.
  */
 
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
-import { executeProcess } from '../utils/process-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const EXPLOIT_MATCHER_SYSTEM_PROMPT = `You are an exploit matching specialist. Given service fingerprints (software name, version, banner), you find matching exploits and build attack chains.
 
@@ -41,7 +41,7 @@ Output format (JSON):
       "cvss": 9.8,
       "exploitability": {
         "score": "trivial",
-        "prerequisites": ["mod_cgi or cgid enabled", "Directory traversal not patched"],
+        "prerequisites": ["mod_cgi or cgid enabled"],
         "reliability": "high",
         "public_exploits": true
       },
@@ -50,85 +50,62 @@ Output format (JSON):
           "type": "exploit-db",
           "id": "50383",
           "title": "Apache HTTP Server 2.4.49 - Path Traversal & RCE",
-          "language": "python",
           "verified": true
         },
         {
           "type": "metasploit",
           "module": "exploit/multi/http/apache_normalize_path_rce",
           "rank": "excellent"
-        },
-        {
-          "type": "nuclei",
-          "template": "CVE-2021-41773",
-          "severity": "critical"
         }
       ],
       "attack_chain": {
-        "steps": [
-          "Verify version with banner grab",
-          "Check if mod_cgi enabled: /cgi-bin/ returns 403 (not 404)",
-          "Send path traversal payload to /cgi-bin/.%2e/%2e%2e/..../bin/sh",
-          "Execute commands, establish reverse shell"
-        ],
+        "steps": ["Verify version", "Check mod_cgi", "Send payload", "Execute commands"],
         "tools_needed": ["curl", "nc"],
         "time_estimate": "< 5 minutes"
       },
-      "mitigations": ["Upgrade to 2.4.51+", "Disable mod_cgi if not needed"],
-      "references": [
-        "https://nvd.nist.gov/vuln/detail/CVE-2021-41773",
-        "https://www.exploit-db.com/exploits/50383"
-      ]
+      "mitigations": ["Upgrade to 2.4.51+"],
+      "references": ["https://nvd.nist.gov/vuln/detail/CVE-2021-41773"]
     }
   ],
   "no_matches": [
     {
       "fingerprint": "OpenSSH 8.9p1",
-      "reason": "No known public exploits for this version",
-      "suggestions": ["Check for weak credentials", "Look for key reuse"]
+      "reason": "No known public exploits",
+      "suggestions": ["Check for weak credentials"]
     }
   ],
   "attack_priority": [
     {
       "rank": 1,
-      "target": "Apache/2.4.49 on port 80",
+      "target": "Apache/2.4.49",
       "exploit": "CVE-2021-41773",
-      "reason": "Trivial RCE, public exploits available, high reliability"
+      "reason": "Trivial RCE, public exploits available"
     }
   ],
-  "recommended_workflow": [
-    "1. Verify Apache 2.4.49 with curl -I",
-    "2. Check mod_cgi: curl http://target/cgi-bin/",
-    "3. If 403, run: msfconsole -x 'use exploit/multi/http/apache_normalize_path_rce; set RHOSTS target; run'",
-    "4. Alternative: python3 50383.py target 80 /bin/bash"
-  ]
+  "recommended_workflow": ["1. Verify Apache version", "2. Run exploit"]
 }
 
 Matching rules:
 1. Exact version match > Version range match > Major version match
 2. Verified exploits > Unverified
-3. Metasploit > Standalone scripts (easier to use)
+3. Metasploit > Standalone scripts
 4. RCE > Auth bypass > LFI > Info disclosure
-5. Recent CVEs (2020+) > Old ones (unless classics)
 
 Known high-value targets (auto-flag):
 - Apache 2.4.49/2.4.50 (CVE-2021-41773)
 - vsftpd 2.3.4 (backdoor)
 - ProFTPD 1.3.5 (mod_copy RCE)
 - Samba 4.5.9 (CVE-2017-7494)
-- Drupal 7.x < 7.58 (Drupalgeddon)
-- WordPress < 5.0 (various)
-- OpenSSH < 7.7 (user enumeration)
 - SMBv1 (EternalBlue)
 
 Only output JSON, nothing else.`
 
 const vglobParams = z.object({
   fingerprints: z.array(z.object({
-    banner: z.string().describe('Raw banner/version string (e.g., "Apache/2.4.49 (Ubuntu)")'),
+    banner: z.string().describe('Raw banner/version string'),
     port: z.number().optional(),
     protocol: z.string().optional(),
-    source: z.string().optional().describe('Where this fingerprint came from (nmap, curl, nc)'),
+    source: z.string().optional(),
   })).describe('Service fingerprints to match against exploits'),
   prioritize: z.enum(['rce', 'auth_bypass', 'info_disclosure', 'any'])
     .optional().default('any')
@@ -136,16 +113,6 @@ const vglobParams = z.object({
   includeMetasploit: z.boolean().optional().default(true)
     .describe('Include Metasploit module recommendations'),
 })
-
-type VglobParams = z.infer<typeof vglobParams>
-
-export interface ParsedFingerprint {
-  raw: string
-  software: string
-  version?: string
-  os_hint?: string
-  configuration_hints: string[]
-}
 
 export interface ExploitMatch {
   fingerprint: string
@@ -159,179 +126,62 @@ export interface ExploitMatch {
     reliability: 'high' | 'medium' | 'low'
     public_exploits: boolean
   }
-  exploits: Array<{
-    type: string
-    id?: string
-    module?: string
-    title?: string
-    template?: string
-    language?: string
-    verified?: boolean
-    rank?: string
-    severity?: string
-  }>
-  attack_chain: {
-    steps: string[]
-    tools_needed: string[]
-    time_estimate: string
-  }
+  exploits: Array<{ type: string; id?: string; module?: string; title?: string; verified?: boolean; rank?: string }>
+  attack_chain: { steps: string[]; tools_needed: string[]; time_estimate: string }
   mitigations: string[]
   references: string[]
 }
 
 export interface VglobResult {
-  fingerprints_analyzed: ParsedFingerprint[]
+  fingerprints_analyzed: Array<{ raw: string; software: string; version?: string; os_hint?: string; configuration_hints: string[] }>
   matches: ExploitMatch[]
   no_matches: Array<{ fingerprint: string; reason: string; suggestions: string[] }>
   attack_priority: Array<{ rank: number; target: string; exploit: string; reason: string }>
   recommended_workflow: string[]
-  rawSearchOutput?: string
 }
 
-const EMPTY_RESULT: VglobResult = {
-  fingerprints_analyzed: [],
-  matches: [],
-  no_matches: [],
-  attack_priority: [],
-  recommended_workflow: [],
-}
-
-/**
- * Extract software names/versions for searchsploit queries
- */
-function extractSearchTerms(fingerprints: Array<{ banner: string }>): string[] {
-  const terms: string[] = []
-
-  for (const fp of fingerprints) {
-    // Extract key terms from banner
-    // "Apache/2.4.49 (Ubuntu)" -> "apache 2.4.49"
-    // "OpenSSH 7.2p2 Ubuntu" -> "openssh 7.2"
-    const cleaned = fp.banner
-      .toLowerCase()
-      .replace(/[()]/g, ' ')
-      .replace(/[/_-]/g, ' ')
-      .trim()
-
-    // Extract name and version
-    const versionMatch = cleaned.match(/(\w+)\s*([\d.]+)/)
-    if (versionMatch) {
-      terms.push(`${versionMatch[1]} ${versionMatch[2]}`)
-    } else {
-      // Just use first word
-      const firstWord = cleaned.split(/\s+/)[0]
-      if (firstWord && firstWord.length > 2) {
-        terms.push(firstWord)
-      }
-    }
-  }
-
-  return [...new Set(terms)] // Dedupe
-}
-
-/**
- * Run searchsploit for each term
- */
-async function searchExploits(terms: string[]): Promise<string> {
-  const results: string[] = []
-
-  // Limit concurrent searches
-  for (const term of terms.slice(0, 5)) {
-    const result = await executeProcess('searchsploit', [
-      '-w', // Show full path URLs
-      '--exclude=dos', // Skip DoS exploits
-      term,
-    ], {
-      timeoutMs: 10000,
-      toolName: 'searchsploit',
-    })
-
-    if (result.success && result.output && !result.output.includes('No Results')) {
-      results.push(`=== ${term} ===\n${result.output}`)
-    }
-  }
-
-  return results.join('\n\n')
-}
-
-export const vglobAgent = defineAgent<typeof vglobParams, VglobResult>({
+export const vglobAgent = defineGeneratorAgent<typeof vglobParams, VglobResult>({
   name: 'vglob',
-  description: 'Pattern match service fingerprints to exploits. Like glob but for vulnerabilities - finds CVEs, Metasploit modules, attack chains.',
+  id: 'vglob',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Pattern match service fingerprints to exploits. Finds CVEs, Metasploit modules, attack chains.',
+
+  spawnerPrompt: 'Matches service fingerprints (banners, versions) against exploit databases. Returns CVEs, Metasploit modules, and attack chains. Use after reconnaissance.',
+
+  outputMode: 'structured_output',
+  toolNames: ['run_exploit_match'],
+
   systemPrompt: EXPLOIT_MATCHER_SYSTEM_PROMPT,
+
+  instructionsPrompt: `Analyze the fingerprints and search results to build a comprehensive exploit matching report.
+
+Focus on:
+1. Parsing each fingerprint to extract software, version, and hints
+2. Matching against known CVEs and exploits
+3. Building attack chains with specific steps
+4. Prioritizing by ease of exploitation and impact
+5. Providing actionable workflow for exploitation`,
+
   parameters: vglobParams,
 
-  async execute(params: VglobParams, context): Promise<AgentResult<VglobResult>> {
-    // Extract search terms from fingerprints
-    const searchTerms = extractSearchTerms(params.fingerprints)
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    const { fingerprints } = params as z.infer<typeof vglobParams>
 
-    // Run searchsploit
-    const searchOutput = await searchExploits(searchTerms)
-
-    // Build prompt
-    let userPrompt = 'Service fingerprints to analyze:\n\n'
-
-    for (const fp of params.fingerprints) {
-      userPrompt += `- "${fp.banner}"`
-      if (fp.port) userPrompt += ` (port ${fp.port})`
-      if (fp.protocol) userPrompt += ` [${fp.protocol}]`
-      userPrompt += '\n'
+    // Step 1: Run exploit matching
+    yield {
+      toolName: 'run_exploit_match',
+      input: {
+        fingerprints: fingerprints.map(f => ({
+          banner: f.banner,
+          port: f.port,
+        })),
+      },
     }
 
-    if (params.prioritize !== 'any') {
-      userPrompt += `\nPrioritize: ${params.prioritize} exploits\n`
-    }
-
-    if (params.includeMetasploit) {
-      userPrompt += '\nInclude Metasploit module recommendations.\n'
-    }
-
-    if (searchOutput) {
-      userPrompt += `\n=== SEARCHSPLOIT RESULTS ===\n${searchOutput}\n`
-    }
-
-    userPrompt += '\nMatch these fingerprints to known exploits and build attack chains.'
-
-    // Run LLM analysis
-    const result = await executeAgentLLM({
-      name: 'vglob',
-      systemPrompt: EXPLOIT_MATCHER_SYSTEM_PROMPT,
-      userPrompt,
-      context,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Exploit matching failed',
-        data: { ...EMPTY_RESULT, rawSearchOutput: searchOutput },
-      }
-    }
-
-    try {
-      const parsed = JSON.parse(result.text) as VglobResult
-      parsed.rawSearchOutput = searchOutput
-
-      // Build summary
-      const matchCount = parsed.matches.length
-      const criticalCount = parsed.matches.filter(m => m.severity === 'critical').length
-      const topMatch = parsed.attack_priority[0]
-
-      const summaryParts = [
-        `${matchCount} exploit matches`,
-        criticalCount > 0 ? `(${criticalCount} critical)` : '',
-        topMatch ? `Top: ${topMatch.exploit}` : '',
-      ].filter(Boolean)
-
-      return {
-        success: true,
-        summary: summaryParts.join(', '),
-        data: parsed,
-      }
-    } catch {
-      return {
-        success: true,
-        summary: 'Exploit matching complete (parse failed)',
-        data: { ...EMPTY_RESULT, rawSearchOutput: searchOutput },
-      }
-    }
+    // Step 2: Analyze and build attack chains
+    yield 'STEP'
   },
 })

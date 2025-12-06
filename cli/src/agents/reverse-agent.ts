@@ -1,12 +1,12 @@
 /**
- * Reverse Agent - Reverse Engineering
+ * Reverse Agent - Reverse Engineering Analysis
  *
- * Analyzes binaries, decompiled code, and reverse engineering challenges.
+ * Analyzes binaries, decompiled code, and RE challenges.
+ * Uses generator pattern with structured output.
  */
 
 import { z } from 'zod'
-import { defineAgent, type AgentResult } from './types'
-import { executeAgentLLM } from '../services/agent-executor'
+import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
 
 const REVERSE_SYSTEM_PROMPT = `You are a reverse engineering analysis agent. You analyze binaries, decompiled code, and RE challenges.
 
@@ -39,8 +39,6 @@ const reverseParams = z.object({
   fileInfo: z.string().optional().describe('Output of file/checksec commands'),
 })
 
-type ReverseParams = z.infer<typeof reverseParams>
-
 export interface ReverseResult {
   analysis: {
     binaryType: string
@@ -53,63 +51,25 @@ export interface ReverseResult {
   tools: string[]
 }
 
-export const reverseAgent = defineAgent<typeof reverseParams, ReverseResult>({
+export const reverseAgent = defineGeneratorAgent<typeof reverseParams, ReverseResult>({
   name: 'reverse',
-  description: 'Analyze binaries and reverse engineering challenges.',
+  id: 'reverse',
+  model: 'anthropic/claude-3.5-haiku',
+
+  description: 'Analyzes binaries and reverse engineering challenges.',
+
+  spawnerPrompt: 'Analyzes binaries, disassembly, and decompiled code. Identifies vulnerabilities and suggests RE approaches.',
+
+  outputMode: 'structured_output',
+
   systemPrompt: REVERSE_SYSTEM_PROMPT,
+
   parameters: reverseParams,
 
-  async execute(params: ReverseParams, context): Promise<AgentResult<ReverseResult>> {
-    let userPrompt = `Code/Disassembly:\n${params.code}`
-
-    if (params.fileInfo) {
-      userPrompt += `\n\nFile info:\n${params.fileInfo}`
-    }
-    if (params.context) {
-      userPrompt += `\n\nContext: ${params.context}`
-    }
-
-    const result = await executeAgentLLM({
-      name: 'reverse',
-      systemPrompt: REVERSE_SYSTEM_PROMPT,
-      userPrompt,
-      context,
-    })
-
-    if (!result.success) {
-      return {
-        success: false,
-        summary: 'Reverse analysis failed',
-        data: {
-          analysis: { binaryType: 'unknown', architecture: 'unknown', protections: [] },
-          functions: [],
-          vulnerabilities: [],
-          approach: [],
-          tools: [],
-        },
-      }
-    }
-
-    try {
-      const data = JSON.parse(result.text) as ReverseResult
-      const vulnCount = data.vulnerabilities.length
-      return {
-        success: true,
-        summary: `${data.analysis.binaryType}/${data.analysis.architecture}${vulnCount ? `, ${vulnCount} vulns` : ''}`,
-        data,
-      }
-    } catch {
-      return {
-        success: false,
-        summary: 'Failed to parse reverse analysis',
-        data: {
-          analysis: { binaryType: 'unknown', architecture: 'unknown', protections: [] },
-          functions: [],
-          vulnerabilities: [],
-          approach: [],
-          tools: [],
-        },
-      }
-    }
+  *handleSteps({
+    params,
+  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
+    // Pure LLM RE analysis - just run a step
+    yield 'STEP'
   },
 })
