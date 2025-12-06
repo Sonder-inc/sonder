@@ -116,60 +116,91 @@ export const Markdown = ({ content }: MarkdownProps) => {
  */
 function renderInlineMarkdown(text: string, theme: ReturnType<typeof useTheme>): React.ReactNode[] {
   const segments: React.ReactNode[] = []
-  let remaining = text
   let key = 0
 
-  while (remaining.length > 0) {
-    // Bold: **text** or __text__
-    const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)$/) ||
-                      remaining.match(/^(.*?)__(.+?)__(.*)$/)
-    if (boldMatch) {
-      if (boldMatch[1]) {
-        segments.push(...renderInlineMarkdown(boldMatch[1], theme))
-      }
-      segments.push(
-        <span key={key++} attributes={TextAttributes.BOLD} fg={theme.muted}>
-          {boldMatch[2]}
-        </span>
-      )
-      remaining = boldMatch[3]
-      continue
-    }
+  // Tokenize the text to handle markdown inline styles
+  // Order matters: check bold (**) before italic (*) to avoid conflicts
+  const tokens: Array<{ type: 'text' | 'bold' | 'italic' | 'code'; content: string }> = []
+  let i = 0
 
-    // Italic: *text* or _text_ (but not inside words)
-    const italicMatch = remaining.match(/^(.*?)\*([^*]+)\*(.*)$/) ||
-                        remaining.match(/^(.*?)(?<!\w)_([^_]+)_(?!\w)(.*)$/)
-    if (italicMatch) {
-      if (italicMatch[1]) {
-        segments.push(...renderInlineMarkdown(italicMatch[1], theme))
+  while (i < text.length) {
+    // Bold: **text**
+    if (text.slice(i, i + 2) === '**') {
+      const endIdx = text.indexOf('**', i + 2)
+      if (endIdx !== -1) {
+        tokens.push({ type: 'bold', content: text.slice(i + 2, endIdx) })
+        i = endIdx + 2
+        continue
       }
-      segments.push(
-        <span key={key++} attributes={TextAttributes.DIM} fg={theme.muted}>
-          {italicMatch[2]}
-        </span>
-      )
-      remaining = italicMatch[3]
-      continue
     }
 
     // Inline code: `text`
-    const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)$/)
-    if (codeMatch) {
-      if (codeMatch[1]) {
-        segments.push(<span key={key++}>{codeMatch[1]}</span>)
+    if (text[i] === '`') {
+      const endIdx = text.indexOf('`', i + 1)
+      if (endIdx !== -1) {
+        tokens.push({ type: 'code', content: text.slice(i + 1, endIdx) })
+        i = endIdx + 1
+        continue
       }
-      segments.push(
-        <span key={key++} fg={theme.muted}>
-          {codeMatch[2]}
-        </span>
-      )
-      remaining = codeMatch[3]
-      continue
     }
 
-    // No more matches, add remaining text
-    segments.push(<span key={key++}>{remaining}</span>)
-    break
+    // Italic: *text* (single asterisk, not at word boundary issues)
+    if (text[i] === '*' && text[i + 1] !== '*') {
+      const endIdx = text.indexOf('*', i + 1)
+      if (endIdx !== -1 && text[endIdx - 1] !== '*') {
+        tokens.push({ type: 'italic', content: text.slice(i + 1, endIdx) })
+        i = endIdx + 1
+        continue
+      }
+    }
+
+    // Regular text - collect until next potential marker
+    let nextMarker = text.length
+    const markers = ['**', '*', '`']
+    for (const marker of markers) {
+      const idx = text.indexOf(marker, i)
+      if (idx !== -1 && idx < nextMarker) {
+        nextMarker = idx
+      }
+    }
+
+    if (nextMarker > i) {
+      tokens.push({ type: 'text', content: text.slice(i, nextMarker) })
+      i = nextMarker
+    } else {
+      // No markers found, take rest of string
+      tokens.push({ type: 'text', content: text.slice(i) })
+      break
+    }
+  }
+
+  // Convert tokens to React nodes
+  for (const token of tokens) {
+    switch (token.type) {
+      case 'bold':
+        segments.push(
+          <span key={key++} attributes={TextAttributes.BOLD} fg={theme.muted}>
+            {token.content}
+          </span>
+        )
+        break
+      case 'italic':
+        segments.push(
+          <span key={key++} attributes={TextAttributes.ITALIC} fg={theme.muted}>
+            {token.content}
+          </span>
+        )
+        break
+      case 'code':
+        segments.push(
+          <span key={key++} fg={theme.muted}>
+            {token.content}
+          </span>
+        )
+        break
+      default:
+        segments.push(<span key={key++}>{token.content}</span>)
+    }
   }
 
   return segments

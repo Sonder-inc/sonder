@@ -53,8 +53,9 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
     // Bottom status bar content
     const hintText = hintOverride ?? '? for shortcuts'
     const sep = ' ─── '
-    const statusContent = `─── ${model}${sep}${mode}${sep}${hintText} `
-    const dashesAfter = Math.max(0, innerWidth - statusContent.length)
+    // Rendered: ╰─ (3) + model + sep(5) + mode + sep(5) + hintText + ' '(1) + ╯(1) = 15 + 2 adjustment
+    const fixedChars = 13
+    const dashesAfter = Math.max(0, innerWidth - fixedChars - model.length - mode.length - hintText.length)
 
     return (
       <box style={{ flexDirection: 'column', width }}>
@@ -64,6 +65,7 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
             borderStyle: 'single',
             borderColor: borderFg,
             customBorderChars: BORDER_CHARS,
+            borderBottom: false,
             paddingLeft: 1,
             paddingRight: 1,
             flexDirection: 'row',

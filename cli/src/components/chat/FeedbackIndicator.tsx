@@ -11,7 +11,7 @@ interface FeedbackIndicatorProps {
   isLastMessage: boolean
 }
 
-type FeedbackState = 'idle' | 'expanded' | 'submitted'
+type FeedbackState = 'idle' | 'hovered' | 'expanded' | 'submitted'
 
 export const FeedbackIndicator = ({
   messageId,
@@ -27,19 +27,29 @@ export const FeedbackIndicator = ({
     setState(feedback ? 'submitted' : 'idle')
   }, [feedback, messageId])
 
-  // Handle keyboard input for feedback (only for last message)
+  const handleMouseOver = useCallback(() => {
+    if (state === 'idle') {
+      setState('hovered')
+    }
+  }, [state])
+
+  const handleMouseOut = useCallback(() => {
+    if (state === 'hovered') {
+      setState('idle')
+    }
+  }, [state])
+
+  const handleClick = useCallback(() => {
+    if (state === 'hovered' || state === 'idle') {
+      setState('expanded')
+    }
+  }, [state])
+
+  // Handle keyboard input for feedback selection when expanded
   useKeyboard(
     useCallback(
       (key: KeyEvent) => {
-        if (!isLastMessage || state === 'submitted') return
-
-        // 'f' key toggles expanded state
-        if (key.sequence === 'f' && state === 'idle') {
-          setState('expanded')
-          return
-        }
-
-        if (state !== 'expanded') return
+        if (!isLastMessage || state !== 'expanded') return
 
         if (key.sequence === '1') {
           onFeedback(messageId, 'bad')
@@ -70,7 +80,10 @@ export const FeedbackIndicator = ({
   // Expanded - show options
   if (state === 'expanded') {
     return (
-      <box style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+      <box
+        style={{ flexDirection: 'row', justifyContent: 'flex-end' }}
+        onMouseOut={() => setState('idle')}
+      >
         <text style={{ fg: theme.muted }}>[</text>
         <text style={{ fg: theme.error }}>1:Bad</text>
         <text style={{ fg: theme.muted }}>,</text>
@@ -82,10 +95,17 @@ export const FeedbackIndicator = ({
     )
   }
 
-  // Idle state - show arrows (press 'f' to expand)
+  // Idle/Hovered - use single element to prevent flicker
+  const content = state === 'hovered' ? '[feedback?]' : '▼▲'
+
   return (
-    <box style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-      <text style={{ fg: theme.muted }}>▼▲</text>
+    <box
+      style={{ flexDirection: 'row', justifyContent: 'flex-end' }}
+      onMouseOver={handleMouseOver}
+      onMouseOut={handleMouseOut}
+      onMouseDown={handleClick}
+    >
+      <text style={{ fg: theme.muted }}>{content}</text>
     </box>
   )
 }

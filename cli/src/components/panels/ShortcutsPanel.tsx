@@ -6,10 +6,10 @@ export const ShortcutsPanel = () => {
   return (
     <box style={{ flexDirection: 'row', marginLeft: 1, gap: 2 }}>
       <box style={{ flexDirection: 'column' }}>
-        <text style={{ fg: theme.muted }}>/ for commands</text>
+        <text style={{ fg: theme.muted }}>/ for cmds</text>
         <text style={{ fg: theme.muted }}>@ for file paths</text>
         <text style={{ fg: theme.muted }}># to memorize</text>
-        <text style={{ fg: theme.muted }}>* threads</text>
+        <text style={{ fg: theme.muted }}>* context</text>
       </box>
       <box style={{ flexDirection: 'column' }}>
         <text style={{ fg: theme.muted }}>⇧tab switch models</text>
