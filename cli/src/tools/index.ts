@@ -39,7 +39,9 @@ export type { ToolResult, ToolDefinition } from './types'
 export { defineTool } from './types'
 
 // Built-in tools
-export { planWrite } from './plan-write'
+export { planWrite, todoStrike, taskComplete } from './plan-write'
 export { flashGrep } from './flash-grep'
 export { explore } from './explore'
 export { spawnAgent } from './spawn-agent'
+export { status } from './status'
+export { runTerminalCommand } from './run-terminal-command'

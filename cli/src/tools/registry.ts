@@ -3,10 +3,15 @@ import type { ToolResult, ToolDefinition } from './types'
 import { loadUserTools } from '../utils/user-loader'
 
 // Import all built-in tools here
-import { planWrite } from './plan-write'
+import { planWrite, todoStrike, taskComplete } from './plan-write'
+import { addSubgoal, updateSubgoal, strikeSubgoal, clearSubgoals } from './subgoal'
 import { flashGrep } from './flash-grep'
 import { explore } from './explore'
 import { spawnAgent } from './spawn-agent'
+import { status } from './status'
+import { runTerminalCommand } from './run-terminal-command'
+import { runReconScans } from './run-recon-scans'
+import { runVulnSearch, runExploitMatch } from './run-vuln-search'
 
 // Using loose array type to avoid complex generic variance issues
 type AnyToolDefinition = ToolDefinition<any>
@@ -15,10 +20,24 @@ type AnyToolDefinition = ToolDefinition<any>
  * Built-in tools (always available)
  */
 const builtInTools: AnyToolDefinition[] = [
+  // Subgoal tracking (replaces plan)
+  addSubgoal,
+  updateSubgoal,
+  strikeSubgoal,
+  clearSubgoals,
+  // Legacy plan tools (deprecated, kept for compatibility)
   planWrite,
+  todoStrike,
+  taskComplete,
+  // Core tools
   flashGrep,
   explore,
   spawnAgent,
+  status,
+  runTerminalCommand,
+  runReconScans,
+  runVulnSearch,
+  runExploitMatch,
 ]
 
 // Runtime registry (populated on init)
