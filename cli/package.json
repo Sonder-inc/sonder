@@ -27,6 +27,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
     "@ai-sdk/openai": "^2.0.77",
+    "@openrouter/ai-sdk-provider": "^1.4.1",
     "@opentui/core": "0.1.46",
     "@opentui/react": "0.1.46",
     "ai": "^5.0.106",
