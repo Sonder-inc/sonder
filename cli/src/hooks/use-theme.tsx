@@ -13,6 +13,34 @@ import type { StoreApi, UseBoundStore } from 'zustand'
 type ThemeStore = {
   theme: ChatTheme
   setThemeName: (name: ThemeName) => void
+  isLimitedColor: boolean
+}
+
+/**
+ * Detect if terminal has limited color support (e.g., Apple Terminal)
+ * Apple Terminal only supports 256 colors, not truecolor
+ */
+export const detectLimitedColorTerminal = (): boolean => {
+  const termProgram = process.env.TERM_PROGRAM
+  const colorterm = process.env.COLORTERM
+
+  // Apple Terminal doesn't set COLORTERM and doesn't support truecolor
+  if (termProgram === 'Apple_Terminal') {
+    return true
+  }
+
+  // If COLORTERM is truecolor or 24bit, we have full color support
+  if (colorterm === 'truecolor' || colorterm === '24bit') {
+    return false
+  }
+
+  // Check TERM for 256color support only (not truecolor)
+  const term = process.env.TERM ?? ''
+  if (term.includes('256color') && !colorterm) {
+    return true
+  }
+
+  return false
 }
 
 export let useThemeStore: UseBoundStore<StoreApi<ThemeStore>> = (() => {
@@ -73,9 +101,11 @@ export function initializeThemeStore() {
 
   const initialThemeName = detectSystemTheme()
   const initialTheme = chatThemes[initialThemeName]
+  const isLimitedColor = detectLimitedColorTerminal()
 
   useThemeStore = create<ThemeStore>((set) => ({
     theme: initialTheme,
+    isLimitedColor,
 
     setThemeName: (name: ThemeName) => {
       const theme = chatThemes[name]
@@ -86,4 +116,8 @@ export function initializeThemeStore() {
 
 export const useTheme = (): ChatTheme => {
   return useThemeStore((state) => state.theme)
+}
+
+export const useIsLimitedColor = (): boolean => {
+  return useThemeStore((state) => state.isLimitedColor)
 }

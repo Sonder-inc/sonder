@@ -106,6 +106,11 @@ async function main(): Promise<void> {
   // Initialize theme store before rendering
   initializeThemeStore()
 
+  // Detect Apple Terminal and warn about limited color support
+  if (process.env.TERM_PROGRAM === 'Apple_Terminal') {
+    console.log('\x1b[33m⚠ Apple Terminal has limited color support. For best experience, use iTerm2, Kitty, or Warp.\x1b[0m\n')
+  }
+
   // Initialize sonder (user config, tools, agents, MCPs)
   await initSonder()
 
