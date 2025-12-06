@@ -89,3 +89,6 @@ notes/
 # Claude
 CLAUDE.md
 
+# Sonder user data
+.sonder/
+
