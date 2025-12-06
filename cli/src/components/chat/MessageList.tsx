@@ -9,6 +9,8 @@ interface MessageListProps {
   toolCalls: ToolCall[]
   expandedToolId: string | null
   onToggleExpandTool: (id: string) => void
+  expandedThinkingId: string | null
+  onToggleExpandThinking: (id: string) => void
   onFeedback: (messageId: string, value: FeedbackValue) => void
 }
 
@@ -17,6 +19,8 @@ export const MessageList = ({
   toolCalls,
   expandedToolId,
   onToggleExpandTool,
+  expandedThinkingId,
+  onToggleExpandThinking,
   onFeedback,
 }: MessageListProps) => {
   // Find the last AI message for keyboard feedback handling
@@ -45,6 +49,11 @@ export const MessageList = ({
                 content={msg.content}
                 isStreaming={msg.isStreaming}
                 isInterrupted={msg.isInterrupted}
+                isThinking={msg.isThinking}
+                thinkingContent={msg.thinkingContent}
+                thinkingDurationMs={msg.thinkingDurationMs}
+                expandedThinkingId={expandedThinkingId}
+                onToggleExpandThinking={onToggleExpandThinking}
                 toolCalls={messageToolCalls}
                 expandedToolId={expandedToolId}
                 onToggleExpandTool={onToggleExpandTool}

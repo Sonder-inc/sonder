@@ -151,6 +151,8 @@ export async function getSmartShortcut(conversationSummary: string): Promise<str
 export interface StreamCallbacks {
   onChunk: (chunk: string, tokenCount: number) => void
   onToolCall?: (toolCall: ToolCallRequest) => void
+  onReasoning?: (chunk: string) => void
+  onReasoningComplete?: () => void
 }
 
 export async function streamChat(
@@ -178,12 +180,20 @@ export async function streamChat(
   let fullText = ''
   let tokenCount = 0
   const toolCalls: ToolCallRequest[] = []
+  let hasReasoning = false
 
   try {
     for await (const part of result.fullStream) {
       if (abortSignal?.aborted) break
 
-      if (part.type === 'text-delta') {
+      if (part.type === 'reasoning-delta') {
+        // Reasoning/thinking content from thinking models
+        hasReasoning = true
+        callbacks.onReasoning?.(part.text)
+      } else if (part.type === 'reasoning-end') {
+        // Reasoning phase complete
+        callbacks.onReasoningComplete?.()
+      } else if (part.type === 'text-delta') {
         fullText += part.text
         tokenCount = Math.ceil(fullText.length / 4)
         callbacks.onChunk(part.text, tokenCount)

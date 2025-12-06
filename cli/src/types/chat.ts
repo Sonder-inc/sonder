@@ -11,6 +11,10 @@ export type ChatMessage = {
   isStreaming?: boolean
   isInterrupted?: boolean
   feedback?: FeedbackValue
+  // Thinking/reasoning content for thinking models
+  thinkingContent?: string
+  thinkingDurationMs?: number
+  isThinking?: boolean
 }
 
 export type InputValue = {

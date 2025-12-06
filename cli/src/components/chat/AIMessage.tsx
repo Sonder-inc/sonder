@@ -1,5 +1,6 @@
 import { useTheme } from '../../hooks/use-theme'
 import { ToolInvocation } from '../tool-invocation'
+import { ThinkingIndicator } from '../thinking-indicator'
 import { InterruptedIndicator } from './InterruptedIndicator'
 import { FeedbackIndicator } from './FeedbackIndicator'
 import { Markdown } from '../markdown'
@@ -10,6 +11,11 @@ interface AIMessageProps {
   content: string
   isStreaming?: boolean
   isInterrupted?: boolean
+  isThinking?: boolean
+  thinkingContent?: string
+  thinkingDurationMs?: number
+  expandedThinkingId: string | null
+  onToggleExpandThinking: (id: string) => void
   toolCalls: ToolCall[]
   expandedToolId: string | null
   onToggleExpandTool: (id: string) => void
@@ -23,6 +29,11 @@ export const AIMessage = ({
   content,
   isStreaming,
   isInterrupted,
+  isThinking,
+  thinkingContent,
+  thinkingDurationMs,
+  expandedThinkingId,
+  onToggleExpandThinking,
   toolCalls,
   expandedToolId,
   onToggleExpandTool,
@@ -31,9 +42,20 @@ export const AIMessage = ({
   isLastMessage,
 }: AIMessageProps) => {
   const theme = useTheme()
+  const hasThinking = thinkingContent || isThinking
 
   return (
     <>
+      {/* Thinking indicator - shows before content */}
+      {hasThinking && (
+        <ThinkingIndicator
+          status={isThinking ? 'thinking' : 'complete'}
+          durationMs={thinkingDurationMs ?? 0}
+          content={thinkingContent}
+          expanded={expandedThinkingId === messageId}
+          onToggleExpand={() => onToggleExpandThinking(messageId)}
+        />
+      )}
       {/* AI message content with markdown */}
       {content && (
         <box style={{ flexDirection: 'column' }}>

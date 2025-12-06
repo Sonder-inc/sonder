@@ -80,6 +80,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     addMessage,
     updateMessage,
     appendToStreamingMessage,
+    appendToThinkingContent,
     inputValue,
     cursorPosition,
     setInputValue,
@@ -92,6 +93,8 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     updateToolCall,
     expandedToolId,
     toggleExpandedTool,
+    expandedThinkingId,
+    toggleExpandedThinking,
     smartShortcut,
     setSmartShortcut,
     incrementUserMessageCount,
@@ -102,6 +105,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
       addMessage: store.addMessage,
       updateMessage: store.updateMessage,
       appendToStreamingMessage: store.appendToStreamingMessage,
+      appendToThinkingContent: store.appendToThinkingContent,
       inputValue: store.inputValue,
       cursorPosition: store.cursorPosition,
       setInputValue: store.setInputValue,
@@ -114,6 +118,8 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
       updateToolCall: store.updateToolCall,
       expandedToolId: store.expandedToolId,
       toggleExpandedTool: store.toggleExpandedTool,
+      expandedThinkingId: store.expandedThinkingId,
+      toggleExpandedThinking: store.toggleExpandedThinking,
       smartShortcut: store.smartShortcut,
       setSmartShortcut: store.setSmartShortcut,
       incrementUserMessageCount: store.incrementUserMessageCount,
@@ -135,6 +141,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     addMessage,
     updateMessage,
     appendToStreamingMessage,
+    appendToThinkingContent,
     setIsStreaming,
     setStreamingMessageId,
     addToolCall,
@@ -366,6 +373,8 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
             toolCalls={toolCalls}
             expandedToolId={expandedToolId}
             onToggleExpandTool={toggleExpandedTool}
+            expandedThinkingId={expandedThinkingId}
+            onToggleExpandThinking={toggleExpandedThinking}
             onFeedback={handleFeedback}
           />
 

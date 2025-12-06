@@ -14,6 +14,7 @@ interface UseChatHandlerOptions {
   addMessage: (msg: ChatMessage) => void
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void
   appendToStreamingMessage: (chunk: string) => void
+  appendToThinkingContent: (chunk: string) => void
   setIsStreaming: (val: boolean) => void
   setStreamingMessageId: (id: string | null) => void
   addToolCall: (call: ToolCall) => void
@@ -39,6 +40,7 @@ export function useChatHandler({
   addMessage,
   updateMessage,
   appendToStreamingMessage,
+  appendToThinkingContent,
   setIsStreaming,
   setStreamingMessageId,
   addToolCall,
@@ -83,6 +85,7 @@ export function useChatHandler({
 
       // Add placeholder AI message
       const aiMessageId = generateId()
+      const thinkingStartTime = Date.now()
       addMessage({
         id: aiMessageId,
         variant: 'ai',
@@ -90,6 +93,7 @@ export function useChatHandler({
         timestamp: new Date(),
         isComplete: false,
         isStreaming: true,
+        isThinking: true,
       })
 
       // Setup streaming
@@ -132,6 +136,16 @@ export function useChatHandler({
               onToolCall: (toolCall) => {
                 registerToolCall(toolCall, currentMessageId)
                 pendingToolCalls.push(toolCall)
+              },
+              onReasoning: (chunk) => {
+                appendToThinkingContent(chunk)
+              },
+              onReasoningComplete: () => {
+                const thinkingDuration = Date.now() - thinkingStartTime
+                updateMessage(currentMessageId, {
+                  isThinking: false,
+                  thinkingDurationMs: thinkingDuration,
+                })
               },
             },
             model,
@@ -209,6 +223,7 @@ export function useChatHandler({
       addMessage,
       updateMessage,
       appendToStreamingMessage,
+      appendToThinkingContent,
       setIsStreaming,
       setStreamingMessageId,
       incrementUserMessageCount,

@@ -20,6 +20,8 @@ export type ChatStoreState = {
   // Smart shortcut state
   smartShortcut: string | null
   userMessageCount: number
+  // Thinking state
+  expandedThinkingId: string | null
 }
 
 type ChatStoreActions = {
@@ -36,10 +38,12 @@ type ChatStoreActions = {
   setIsStreaming: (streaming: boolean) => void
   setStreamingMessageId: (id: string | null) => void
   appendToStreamingMessage: (content: string) => void
+  appendToThinkingContent: (content: string) => void
   addToolCall: (toolCall: ToolCall) => void
   updateToolCall: (id: string, updates: Partial<ToolCall>) => void
   setExpandedToolId: (id: string | null) => void
   toggleExpandedTool: (id: string) => void
+  toggleExpandedThinking: (id: string) => void
   // Smart shortcut actions
   setSmartShortcut: (shortcut: string | null) => void
   incrementUserMessageCount: () => number
@@ -62,8 +66,9 @@ const initialState: ChatStoreState = {
   streamingMessageId: null,
   toolCalls: [],
   expandedToolId: null,
-  smartShortcut: '/init',  // First item in queue
+  smartShortcut: null,
   userMessageCount: 0,
+  expandedThinkingId: null,
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -158,6 +163,18 @@ export const useChatStore = create<ChatStore>()(
         }
       }),
 
+    appendToThinkingContent: (content) =>
+      set((state) => {
+        if (state.streamingMessageId) {
+          const message = state.messages.find(
+            (m) => m.id === state.streamingMessageId,
+          )
+          if (message) {
+            message.thinkingContent = (message.thinkingContent ?? '') + content
+          }
+        }
+      }),
+
     addToolCall: (toolCall) =>
       set((state) => {
         state.toolCalls.push(toolCall)
@@ -179,6 +196,11 @@ export const useChatStore = create<ChatStore>()(
     toggleExpandedTool: (id) =>
       set((state) => {
         state.expandedToolId = state.expandedToolId === id ? null : id
+      }),
+
+    toggleExpandedThinking: (id) =>
+      set((state) => {
+        state.expandedThinkingId = state.expandedThinkingId === id ? null : id
       }),
 
     setSmartShortcut: (shortcut) =>
@@ -208,6 +230,7 @@ export const useChatStore = create<ChatStore>()(
         state.expandedToolId = null
         state.smartShortcut = null
         state.userMessageCount = 0
+        state.expandedThinkingId = null
       }),
   })),
 )
