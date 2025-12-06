@@ -1,10 +1,48 @@
-// Re-export from registry
-export { executeTool, availableTools, getToolNames, initToolRegistry } from './registry'
+/**
+ * Tools Module
+ *
+ * Tools are functions the LLM can invoke during conversation.
+ *
+ * ## Creating a new tool
+ *
+ * ```typescript
+ * import { defineTool } from './types'
+ * import { z } from 'zod'
+ *
+ * export const myTool = defineTool({
+ *   name: 'my_tool',
+ *   description: 'What this tool does',
+ *   parameters: z.object({
+ *     query: z.string(),
+ *   }),
+ *   async execute(params) {
+ *     // Your logic
+ *     return { success: true, summary: '...', fullResult: {} }
+ *   },
+ * })
+ * ```
+ *
+ * Then register it in `registry.ts`.
+ */
 
-// Re-export types
+// Registry - tool discovery and execution
+export {
+  executeTool,
+  availableTools,
+  getToolNames,
+  getToolDescriptions,
+  initToolRegistry,
+} from './registry'
+
+// Types - for creating new tools
 export type { ToolResult, ToolDefinition } from './types'
 export { defineTool } from './types'
 
-// Re-export individual tools for direct access
+// Built-in tools
 export { searchOnline } from './search-online'
 export { planWrite } from './plan-write'
+export { globMatcher } from './glob-matcher'
+export { grep } from './grep'
+export { filePicker } from './file-picker'
+export { commander } from './commander'
+export { editor } from './editor'
