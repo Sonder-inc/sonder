@@ -96,6 +96,42 @@ ${fingerprintMarkdown}
   }
 }
 
+/**
+ * Trigger the auto-PR workflow to fix an issue
+ */
+export async function triggerAutoPR(
+  title: string,
+  body: string,
+  githubToken: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/vnd.github+json',
+        },
+        body: JSON.stringify({
+          event_type: 'feedback_submitted',
+          client_payload: { title, body },
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.text()
+      return { success: false, error: `Dispatch failed: ${response.status} - ${error}` }
+    }
+
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 // Alternative: create issue via GitHub API directly (doesn't require gh CLI)
 export async function createSupportTicketApi(ticket: SupportTicket, githubToken: string): Promise<SupportResult> {
   try {
