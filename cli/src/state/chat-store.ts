@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
 import type { ChatMessage, InputValue, ToolCall } from '../types/chat'
+import { saveMessage, loadMessages } from '../services/message-persistence'
 
 export type { InputValue, ToolCall }
 
@@ -27,6 +28,8 @@ type ChatStoreActions = {
   ) => void
   addMessage: (message: ChatMessage) => void
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void
+  loadMessagesForThread: (messageIds: string[]) => void
+  clearMessages: () => void
   setInputValue: (value: InputValue | ((prev: InputValue) => InputValue)) => void
   setInputFocused: (focused: boolean) => void
   setIsFocusSupported: (supported: boolean) => void
@@ -76,6 +79,10 @@ export const useChatStore = create<ChatStore>()(
     addMessage: (message) =>
       set((state) => {
         state.messages.push(message)
+        // Persist completed messages to disk
+        if (message.isComplete) {
+          saveMessage(message)
+        }
       }),
 
     updateMessage: (id, updates) =>
@@ -83,7 +90,25 @@ export const useChatStore = create<ChatStore>()(
         const message = state.messages.find((m) => m.id === id)
         if (message) {
           Object.assign(message, updates)
+          // Persist when message becomes complete
+          if (message.isComplete) {
+            saveMessage(message)
+          }
         }
+      }),
+
+    loadMessagesForThread: (messageIds) =>
+      set((state) => {
+        state.messages = loadMessages(messageIds)
+        state.toolCalls = [] // Clear tool calls when switching threads
+        state.expandedToolId = null
+      }),
+
+    clearMessages: () =>
+      set((state) => {
+        state.messages = []
+        state.toolCalls = []
+        state.expandedToolId = null
       }),
 
     setInputValue: (value) =>

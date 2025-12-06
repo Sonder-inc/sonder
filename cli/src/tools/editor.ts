@@ -46,15 +46,32 @@ export const editor = defineTool({
             }
           }
 
+          // Try to read existing file to calculate diff stats
+          let existingLines = 0
+          try {
+            const existing = await readFile(filePath, 'utf-8')
+            existingLines = existing.split('\n').length
+          } catch {
+            // File doesn't exist yet, that's fine
+          }
+
           // Create directory if needed
           await mkdir(dirname(filePath), { recursive: true })
           await writeFile(filePath, content, 'utf-8')
 
-          const lines = content.split('\n').length
+          const newLines = content.split('\n').length
+          const additions = existingLines === 0 ? newLines : Math.max(0, newLines - existingLines)
+          const deletions = existingLines === 0 ? 0 : Math.max(0, existingLines - newLines)
+
           return {
             success: true,
-            summary: `Wrote ${lines} lines`,
-            fullResult: `File written: ${path} (${lines} lines, ${content.length} chars)`,
+            summary: `Wrote ${newLines} lines`,
+            fullResult: `File written: ${path} (${newLines} lines, ${content.length} chars)`,
+            fileStats: {
+              additions,
+              deletions,
+              changes: 1,
+            },
           }
         }
 
@@ -80,12 +97,22 @@ export const editor = defineTool({
           const patched = original.replace(search, content)
           await writeFile(filePath, patched, 'utf-8')
 
+          const searchLines = search.split('\n').length
+          const contentLines = content.split('\n').length
+          const additions = Math.max(0, contentLines - searchLines)
+          const deletions = Math.max(0, searchLines - contentLines)
+
           const diff = `- ${search.split('\n').join('\n- ')}\n+ ${content.split('\n').join('\n+ ')}`
 
           return {
             success: true,
             summary: 'Patched',
             fullResult: `File patched: ${path}\n\n${diff}`,
+            fileStats: {
+              additions,
+              deletions,
+              changes: 1,
+            },
           }
         }
 

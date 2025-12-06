@@ -1,12 +1,22 @@
 import { z } from 'zod'
 
 /**
+ * File change stats for tracking additions/changes/deletions
+ */
+export interface FileChangeStats {
+  additions: number // Lines added
+  deletions: number // Lines deleted
+  changes: number // Files modified
+}
+
+/**
  * Result returned by tool execution
  */
 export interface ToolResult {
   success: boolean
   summary: string
   fullResult: string
+  fileStats?: FileChangeStats // Optional file change tracking
 }
 
 /**

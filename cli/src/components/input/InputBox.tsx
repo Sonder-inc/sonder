@@ -66,7 +66,6 @@ export const InputBox = forwardRef<MultilineInputHandle, InputBoxProps>(
             borderStyle: 'single',
             borderColor: borderFg,
             customBorderChars: BORDER_CHARS,
-            borderBottom: false,
             paddingLeft: 1,
             paddingRight: 1,
             flexDirection: 'row',

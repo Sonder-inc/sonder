@@ -11,6 +11,9 @@ import { App } from './app'
 import { initializeThemeStore } from './hooks/use-theme'
 import { checkForUpdates, performUpdate } from './utils/updater'
 import { initSonder } from './utils/init'
+import { parseScope } from './config/scope'
+import { runHeadlessMode } from './headless'
+import { loadApiKeysToEnv } from './utils/user-config'
 
 // Load .env from parent directory
 const envPath = resolve(import.meta.dir, '../../.env')
@@ -25,6 +28,9 @@ if (existsSync(envPath)) {
     }
   }
 }
+
+// Load API keys from ~/.sonder/config.json (env vars take precedence)
+loadApiKeysToEnv()
 
 function loadPackageVersion(): string {
   if (process.env.SONDER_CLI_VERSION) {
@@ -67,6 +73,13 @@ function parseArgs(): ParsedArgs {
 }
 
 async function main(): Promise<void> {
+  // Check for headless mode first (before any UI initialization)
+  const scope = parseScope(process.argv)
+  if (scope.scope === 'headless') {
+    await runHeadlessMode(scope)
+    return
+  }
+
   const { initialPrompt } = parseArgs()
 
   // Check for updates on launch

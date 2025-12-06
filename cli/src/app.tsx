@@ -4,8 +4,10 @@ import { useShallow } from 'zustand/react/shallow'
 import { useTerminalDimensions } from './hooks/use-terminal-dimensions'
 import { useChatHandler } from './hooks/use-chat-handler'
 import { useAppKeyboard } from './hooks/use-app-keyboard'
+import { useSchoolMode } from './hooks/use-school-mode'
 import { useChatStore } from './state/chat-store'
 import { usePlanStore } from './state/plan-store'
+import { useThreadStore } from './state/thread-store'
 import { InputBox, type MultilineInputHandle } from './components/input'
 import { WelcomeBanner } from './components/welcome-banner'
 import { StreamingStatus } from './components/streaming-status'
@@ -14,11 +16,14 @@ import { ShortcutsPanel } from './components/panels/ShortcutsPanel'
 import { CommandPanel } from './components/panels/CommandPanel'
 import { ContextPanel } from './components/panels/ContextPanel'
 import { StatusPanel } from './components/panels/StatusPanel'
+import { ConfigPanel } from './components/panels/ConfigPanel'
+import { SchoolModePanel } from './components/school'
 import { Sidebar } from './components/Sidebar'
 import { SystemInfo } from './components/SystemInfo'
 import { MODELS, MODES, getModelId } from './constants/app-constants'
+import { createSupportTicket } from './services/support'
 import type { ScrollBoxRenderable } from '@opentui/core'
-import type { FeedbackValue } from './types/chat'
+import type { FeedbackValue, ChatMessage } from './types/chat'
 
 interface AppProps {
   initialPrompt: string | null
@@ -34,6 +39,41 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
   const [modeIndex, setModeIndex] = useState(0)
   const [thinkingEnabled, setThinkingEnabled] = useState(true)
   const [showStatusPanel, setShowStatusPanel] = useState(false)
+  const [showConfigPanel, setShowConfigPanel] = useState(false)
+
+  // Thread store - load on mount
+  const loadThreads = useThreadStore((state) => state.loadThreads)
+  const threadsLoaded = useThreadStore((state) => state.loaded)
+  const currentThreadId = useThreadStore((state) => state.currentThreadId)
+  const addMessageToThread = useThreadStore((state) => state.addMessageToThread)
+  const getThreadMessageIds = useThreadStore((state) => state.getThreadMessageIds)
+
+  // Chat store - load messages for thread
+  const loadMessagesForThread = useChatStore((state) => state.loadMessagesForThread)
+
+  useEffect(() => {
+    if (!threadsLoaded) {
+      loadThreads()
+    }
+  }, [loadThreads, threadsLoaded])
+
+  // Load messages when thread changes
+  useEffect(() => {
+    if (threadsLoaded && currentThreadId) {
+      const messageIds = getThreadMessageIds(currentThreadId)
+      loadMessagesForThread(messageIds)
+    }
+  }, [threadsLoaded, currentThreadId, getThreadMessageIds, loadMessagesForThread])
+
+  // School mode
+  const {
+    state: schoolState,
+    enterSchoolMode,
+    exitSchoolMode,
+    selectPlatform,
+    selectMachine,
+    isActive: isSchoolActive,
+  } = useSchoolMode()
 
   const {
     messages,
@@ -55,6 +95,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     smartShortcut,
     setSmartShortcut,
     incrementUserMessageCount,
+    clearMessages,
   } = useChatStore(
     useShallow((store) => ({
       messages: store.messages,
@@ -76,6 +117,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
       smartShortcut: store.smartShortcut,
       setSmartShortcut: store.setSmartShortcut,
       incrementUserMessageCount: store.incrementUserMessageCount,
+      clearMessages: store.clearMessages,
     })),
   )
 
@@ -109,6 +151,9 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     showContext,
     selectedMenuIndex,
     pendingExit,
+    contextFocusPhase,
+    worktreeSelectedId,
+    worktreeAction,
   } = useAppKeyboard({
     inputValue,
     setInputValue,
@@ -127,6 +172,10 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     setSmartShortcut,
     showStatusPanel,
     setShowStatusPanel,
+    showConfigPanel,
+    setShowConfigPanel,
+    addMessage,
+    clearMessages,
   })
 
   // Index of 'school' in the MODES array
@@ -148,8 +197,15 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
 
       switch (command) {
         case '/school':
-          // Toggle school mode - if already in school, go back to stealth (0)
-          setModeIndex((prev) => prev === SCHOOL_MODE_INDEX ? 0 : SCHOOL_MODE_INDEX)
+        case '/hack':
+          // Toggle school mode - if already in school, exit; otherwise enter
+          if (modeIndex === SCHOOL_MODE_INDEX) {
+            exitSchoolMode()
+            setModeIndex(0)
+          } else {
+            setModeIndex(SCHOOL_MODE_INDEX)
+            enterSchoolMode()
+          }
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
 
@@ -178,6 +234,65 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
 
         case '/config':
         case '/theme':
+          setShowConfigPanel(true)
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
+        case '/feedback': {
+          // Get the description after the command
+          const description = trimmed.slice(command.length).trim()
+          if (!description) {
+            // Show hint that they need to provide a description
+            addMessage({
+              id: `sys-${Date.now()}`,
+              variant: 'system',
+              content: 'Usage: /feedback <description>',
+              timestamp: new Date(),
+              isComplete: true,
+            })
+            setInputValue({ text: '/feedback ', cursorPosition: 10, lastEditDueToNav: false })
+            return
+          }
+
+          // Create support ticket with fingerprint
+          addMessage({
+            id: `sys-${Date.now()}`,
+            variant: 'system',
+            content: 'Creating support ticket...',
+            timestamp: new Date(),
+            isComplete: true,
+          })
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+
+          // Fire and forget - create ticket async
+          void (async () => {
+            const result = await createSupportTicket({
+              title: description.slice(0, 80),
+              description,
+              sonderVersion: version,
+            })
+
+            if (result.success) {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `Support ticket created: ${result.issueUrl}`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            } else {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `Failed to create ticket: ${result.error}`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            }
+          })()
+          return
+        }
+
         case '/doctor':
         case '/login':
         case '/logout':
@@ -191,7 +306,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
 
     handleSendMessage(trimmed)
     setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel])
+  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel, setShowConfigPanel, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode])
 
   useEffect(() => {
     if (initialPrompt && messages.length === 0) {
@@ -286,7 +401,15 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
           {/* Panels - shown below input */}
           {showShortcuts && <ShortcutsPanel />}
           {showCommands && <CommandPanel inputValue={inputValue} selectedIndex={selectedMenuIndex} />}
-          {showContext && <ContextPanel inputValue={inputValue} selectedIndex={selectedMenuIndex} />}
+          {showContext && (
+            <ContextPanel
+              inputValue={inputValue}
+              selectedIndex={selectedMenuIndex}
+              worktreeSelectedId={worktreeSelectedId}
+              focusPhase={contextFocusPhase}
+              worktreeAction={worktreeAction}
+            />
+          )}
           {showStatusPanel && (
             <StatusPanel
               model={MODELS[modelIndex]}
@@ -294,6 +417,19 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
               mode={MODES[modeIndex]}
               version={version}
               thinkingEnabled={thinkingEnabled}
+            />
+          )}
+          {showConfigPanel && (
+            <ConfigPanel onClose={() => setShowConfigPanel(false)} />
+          )}
+
+          {/* School mode panel - shows during setup phases or active session */}
+          {modeIndex === SCHOOL_MODE_INDEX && schoolState.phase !== 'idle' && (
+            <SchoolModePanel
+              state={schoolState}
+              onSelectPlatform={selectPlatform}
+              onSelectMachine={selectMachine}
+              onCancel={exitSchoolMode}
             />
           )}
 

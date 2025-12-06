@@ -12,6 +12,17 @@ export const MODEL_IDS: Record<ModelName, string> = {
 // Models that support thinking mode
 export const THINKING_CAPABLE_MODELS: ModelName[] = ['sonder']
 
+// Context limits per model (keyed by API model ID)
+export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  'anthropic/claude-3.7-sonnet': 200_000,
+  'anthropic/claude-3.7-sonnet:thinking': 200_000,
+  'anthropic/claude-opus-4.5': 200_000,
+  'openai/gpt-5.1': 128_000,
+  'google/gemini-3-pro-preview': 1_000_000,
+}
+
+export const DEFAULT_CONTEXT_LIMIT = 200_000
+
 export function getModelId(model: ModelName, thinkingEnabled: boolean): string {
   const baseId = MODEL_IDS[model]
   if (thinkingEnabled && THINKING_CAPABLE_MODELS.includes(model)) {
@@ -44,6 +55,7 @@ export const COMMANDS: readonly Command[] = [
   { name: '/init', aliases: [], description: 'Initialize sonder in current directory' },
   { name: '/login', aliases: ['logout'], description: 'Login or logout when already logged in' },
   { name: '/school', aliases: [], description: 'Hacking playground to rank up' },
+  { name: '/feedback', aliases: [], description: 'Submit feedback or report a bug' },
 ]
 
 // Thread/context menu items
@@ -53,7 +65,7 @@ export interface ContextItem {
 }
 
 export const CONTEXT_ITEMS: readonly ContextItem[] = [
-  { name: '*context', label: 'context' },
+  { name: '*compact', label: 'compact' },
   { name: '*fork', label: 'fork' },
   { name: '*switch', label: 'switch' },
 ]

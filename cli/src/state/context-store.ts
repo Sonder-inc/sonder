@@ -1,22 +1,6 @@
 import { create } from 'zustand'
-import { MODEL_IDS, type ModelName } from '../constants/app-constants'
-
-/**
- * Rough token estimation (4 chars ≈ 1 token)
- */
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4)
-}
-
-/**
- * Context limits per model
- */
-const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  'anthropic/claude-3.7-sonnet:thinking': 200_000,
-  'anthropic/claude-opus-4.5': 200_000,
-  'openai/gpt-5.1': 128_000,
-  'google/gemini-3-pro-preview': 1_000_000,
-}
+import { MODEL_IDS, MODEL_CONTEXT_LIMITS, DEFAULT_CONTEXT_LIMIT, type ModelName } from '../constants/app-constants'
+import { estimateTokens } from '../utils/tokens'
 
 export interface ContextUsage {
   systemPrompt: number
@@ -72,7 +56,7 @@ export const useContextStore = create<ContextStore>((set, get) => ({
 
   getUsage: () => {
     const state = get()
-    const limit = MODEL_CONTEXT_LIMITS[state.currentModel] || 200_000
+    const limit = MODEL_CONTEXT_LIMITS[state.currentModel] || DEFAULT_CONTEXT_LIMIT
     const total = state.systemPromptTokens + state.toolsTokens + state.messageTokens
     return {
       systemPrompt: state.systemPromptTokens,
@@ -87,22 +71,5 @@ export const useContextStore = create<ContextStore>((set, get) => ({
   reset: () => set({ messageTokens: 0 }),
 }))
 
-/**
- * Calculate token usage from messages array
- */
-export function calculateMessageTokens(messages: Array<{ content: string }>): number {
-  return messages.reduce((acc, msg) => acc + estimateTokens(msg.content), 0)
-}
-
-/**
- * Format token count for display
- */
-export function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M`
-  }
-  if (tokens >= 1_000) {
-    return `${(tokens / 1_000).toFixed(1)}k`
-  }
-  return tokens.toString()
-}
+// Re-export from utils for backwards compatibility
+export { formatTokens, calculateMessageTokens } from '../utils/tokens'
