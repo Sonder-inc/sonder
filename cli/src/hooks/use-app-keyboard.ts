@@ -8,6 +8,7 @@ import type { ContextFocusPhase } from '../components/panels/ContextPanel'
 import { useWorktreeNavigation } from './use-worktree-navigation'
 import { useThreadStore } from '../state/thread-store'
 import { saveMessage } from '../services/message-persistence'
+import { copyToClipboard } from '../utils/clipboard'
 
 interface InputValue {
   text: string
@@ -42,6 +43,8 @@ interface UseAppKeyboardOptions {
   // Message handling for compact summary
   addMessage?: (message: ChatMessage) => void
   clearMessages?: () => void
+  // Messages for copy functionality
+  messages?: ChatMessage[]
 }
 
 export function useAppKeyboard({
@@ -66,6 +69,7 @@ export function useAppKeyboard({
   setShowConfigPanel,
   addMessage,
   clearMessages,
+  messages,
 }: UseAppKeyboardOptions) {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCommands, setShowCommands] = useState(false)
@@ -367,6 +371,23 @@ export function useAppKeyboard({
           return
         }
 
+        // Ctrl+Y: copy last AI message to clipboard
+        if (key.ctrl && key.name === 'y' && messages) {
+          const lastAiMessage = [...messages].reverse().find((m) => m.variant === 'ai' && m.content)
+          if (lastAiMessage?.content && addMessage) {
+            void copyToClipboard(lastAiMessage.content).then((success) => {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: success ? 'Copied to clipboard' : 'Failed to copy',
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            })
+          }
+          return
+        }
+
         if (key.ctrl && key.name === 'c') {
           // Ctrl+C while streaming: cancel the stream
           if (isStreaming) {
@@ -412,7 +433,7 @@ export function useAppKeyboard({
           }
         }
       },
-      [inputValue, setInputValue, showShortcuts, showContext, pendingExit, isStreaming, cancelStream, toolCalls, toggleExpandedTool, showConfigPanel],
+      [inputValue, setInputValue, showShortcuts, showContext, pendingExit, isStreaming, cancelStream, toolCalls, toggleExpandedTool, showConfigPanel, messages, addMessage],
     ),
   )
 

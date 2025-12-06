@@ -188,6 +188,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     setShowConfigPanel,
     addMessage,
     clearMessages,
+    messages,
   })
 
   // Index of 'school' in the MODES array
@@ -305,6 +306,49 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
           return
         }
 
+        case '/test-wizard':
+          setQuestionWizard({
+            questions: [
+              {
+                id: 'scope',
+                header: 'Scope',
+                question: 'What scope of implementation do you want?',
+                options: [
+                  { label: 'Client only', description: 'Connect to external servers' },
+                  { label: 'Server only', description: 'Expose as server for other apps' },
+                  { label: 'Both', description: 'Full bidirectional support' },
+                ],
+              },
+              {
+                id: 'transport',
+                header: 'Transport',
+                question: 'Which transport protocol?',
+                options: [
+                  { label: 'stdio', description: 'Standard input/output' },
+                  { label: 'HTTP', description: 'REST API over HTTP' },
+                ],
+              },
+            ],
+            onComplete: (answers) => {
+              // Format answers as a message and send to agent
+              const formatted = Object.entries(answers)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('\n')
+              handleSendMessage(`User clarifications:\n${formatted}`)
+            },
+            onCancel: () => {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: 'Wizard cancelled',
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            },
+          })
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
         case '/doctor':
         case '/login':
         case '/logout':
@@ -318,7 +362,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
 
     handleSendMessage(trimmed)
     setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel, setShowConfigPanel, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode])
+  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel, setShowConfigPanel, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode, setQuestionWizard])
 
   useEffect(() => {
     if (initialPrompt && messages.length === 0) {
@@ -404,7 +448,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
             cursorPosition={cursorPosition}
             setInputValue={setInputValue}
             onSubmit={handleSubmit}
-            focused={inputFocused && !isStreaming}
+            focused={inputFocused && !isStreaming && !questionWizard}
             width={mainWidth}
             model={MODELS[modelIndex]}
             mode={MODES[modeIndex]}

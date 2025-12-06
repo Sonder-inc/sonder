@@ -4,7 +4,7 @@ import { useFlavorWord } from './use-flavor-word'
 import { useSmartShortcut } from './use-smart-shortcut'
 import { useStreaming } from './use-streaming'
 import { useToolExecutor } from './use-tool-executor'
-import { usePlanStore } from '../state/plan-store'
+import { useSubgoalStore } from '../state/subgoal-store'
 import { useThreadStore } from '../state/thread-store'
 import type { ChatMessage, ToolCall } from '../types/chat'
 
@@ -27,15 +27,19 @@ const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2
 
 const SYSTEM_PROMPT = `You are Sonder, a helpful AI assistant for cybersecurity and hacking.
 
-IMPORTANT: When you need to use a tool, CALL IT DIRECTLY. Do not say "I'll use X" or "Let me try X" - just invoke the tool immediately.
+TOOL USAGE:
+- Call tools DIRECTLY without announcing ("I'll use X")
+- Chain multiple tools until task is complete
+- If a tool fails, retry with different params or try alternatives
 
-You have full autonomy to chain multiple tool calls until your task is complete:
-- Call tools directly without announcing them
-- If a tool fails, retry with different parameters or try alternatives
-- Use todoWrite to track multi-step progress
-- Only provide a final text response when you're truly done`
+MULTI-STEP TASKS:
+1. addSubgoal for each task at the START (all 'pending')
+2. Execute first task with appropriate tools
+3. strikeSubgoal(id) to mark done - tells you next task
+4. Repeat 2-3 for each task
+5. Give your final response when ALL subgoals complete
 
-const MAX_TOOL_ITERATIONS = 10 // Prevent infinite loops
+CRITICAL: Complete all subgoals before stopping.`
 
 export function useChatHandler({
   model,
@@ -64,8 +68,8 @@ export function useChatHandler({
 
   const handleSendMessage = useCallback(
     async (content: string) => {
-      // Clear any existing plan from previous message
-      usePlanStore.getState().clear()
+      // Clear any existing subgoals from previous message
+      useSubgoalStore.getState().clear()
 
       // Add user message
       const userMessageId = generateId()
@@ -122,11 +126,10 @@ export function useChatHandler({
           { role: 'user' as const, content },
         ]
 
-        // Agentic tool call loop - allows multiple iterations
+        // Agentic tool call loop - continues until taskComplete or abort
         let continueLoop = true
-        let iterationCount = 0
 
-        while (continueLoop && !abortController.signal.aborted && iterationCount < MAX_TOOL_ITERATIONS) {
+        while (continueLoop && !abortController.signal.aborted) {
           const pendingToolCalls: ToolCallRequest[] = []
 
           const result = await streamChat(
@@ -162,7 +165,6 @@ export function useChatHandler({
           )
 
           if (result.toolCalls.length > 0) {
-            iterationCount++
             // Mark current message as complete
             updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
 
@@ -209,13 +211,39 @@ export function useChatHandler({
             currentMessageId = answerMessageId
             setStreamingMessageId(answerMessageId)
           } else {
-            continueLoop = false
-          }
-        }
+            // Check if there are pending subgoals before stopping
+            const subgoals = Object.values(useSubgoalStore.getState().subgoals)
+            const pendingSubgoals = subgoals.filter(s => s.status !== 'completed')
 
-        // Warn if we hit the iteration limit
-        if (iterationCount >= MAX_TOOL_ITERATIONS) {
-          appendToStreamingMessage('\n\n*[Reached maximum tool iterations]*')
+            if (pendingSubgoals.length > 0) {
+              // Model tried to stop but there's pending work - nudge it to continue
+              chatMessages.push({
+                role: 'user',
+                content: `You have ${pendingSubgoals.length} pending subgoal(s):\n` +
+                  pendingSubgoals.map(s => `- ${s.objective}`).join('\n') +
+                  `\n\nExecute "${pendingSubgoals[0].objective}" now, then call strikeSubgoal("${pendingSubgoals[0].id}").`,
+              })
+
+              // Create new message for continued response
+              updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
+              const continueMessageId = generateId()
+              thinkingStartTime = null
+              addMessage({
+                id: continueMessageId,
+                variant: 'ai',
+                content: '',
+                timestamp: new Date(),
+                isComplete: false,
+                isStreaming: true,
+                isThinking: false,
+              })
+              currentMessageId = continueMessageId
+              setStreamingMessageId(continueMessageId)
+              // Don't set continueLoop = false, keep going
+            } else {
+              continueLoop = false
+            }
+          }
         }
 
         updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
