@@ -1,5 +1,4 @@
 export { Cursor } from './cursor'
-export { Chat } from './chat'
 export { MessageBlock } from './message-block'
 export { MultilineInput, type MultilineInputHandle } from './input'
 export { StatusBar } from './status-bar'

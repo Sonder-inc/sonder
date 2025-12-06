@@ -1,5 +1,6 @@
 import { UserMessage } from './UserMessage'
 import { AIMessage } from './AIMessage'
+import { SystemMessage } from './SystemMessage'
 import { InterruptedIndicator } from './InterruptedIndicator'
 import type { ChatMessage, ToolCall, FeedbackValue } from '../../types/chat'
 
@@ -36,6 +37,8 @@ export const MessageList = ({
           <box key={msg.id} style={{ flexDirection: 'column', marginBottom: 1 }}>
             {msg.variant === 'user' ? (
               <UserMessage content={msg.content} />
+            ) : msg.variant === 'system' ? (
+              <SystemMessage content={msg.content} />
             ) : (
               <AIMessage
                 messageId={msg.id}

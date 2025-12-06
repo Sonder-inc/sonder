@@ -2,6 +2,8 @@ import { useTheme } from '../../hooks/use-theme'
 import { useChatStore } from '../../state/chat-store'
 import { getToolNames } from '../../tools/registry'
 import { getAgentNames } from '../../agents/registry'
+import { MODEL_CONTEXT_LIMITS, DEFAULT_CONTEXT_LIMIT } from '../../constants/app-constants'
+import { formatTokens, estimateTokens } from '../../utils/tokens'
 
 interface StatusPanelProps {
   model: string      // Display name (e.g., "sonder", "opus 4.5")
@@ -16,25 +18,6 @@ const FILLED = '\u2593'   // ▓
 const EMPTY = '\u2591'    // ░
 const RESERVED = '\u2592' // ▒
 
-// Model context limits (keyed by base model ID)
-const MODEL_LIMITS: Record<string, number> = {
-  'anthropic/claude-3.7-sonnet': 200_000,
-  'anthropic/claude-3.7-sonnet:thinking': 200_000,
-  'anthropic/claude-opus-4.5': 200_000,
-  'openai/gpt-5.1': 128_000,
-  'google/gemini-3-pro-preview': 1_000_000,
-}
-
-function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`
-  return tokens.toString()
-}
-
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4)
-}
-
 export const StatusPanel = ({ model, modelId, mode, version, thinkingEnabled }: StatusPanelProps) => {
   const theme = useTheme()
   const messages = useChatStore((s) => s.messages)
@@ -46,7 +29,7 @@ export const StatusPanel = ({ model, modelId, mode, version, thinkingEnabled }: 
   const messageTokens = messages.reduce((acc, m) => acc + estimateTokens(m.content), 0)
   const toolCallTokens = toolCalls.reduce((acc, tc) => acc + estimateTokens(tc.fullResult || ''), 0)
   const total = systemPrompt + tools + messageTokens + toolCallTokens
-  const limit = MODEL_LIMITS[modelId] || 200_000
+  const limit = MODEL_CONTEXT_LIMITS[modelId] || DEFAULT_CONTEXT_LIMIT
   const reserveBuffer = Math.floor(limit * 0.225)
   const freeSpace = Math.max(0, limit - total - reserveBuffer)
   const percentage = Math.round((total / limit) * 100)
