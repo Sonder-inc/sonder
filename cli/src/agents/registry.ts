@@ -1,5 +1,7 @@
-import type { AgentContext, AgentResult, AgentDefinition } from './types'
+import type { AgentContext, AgentResult, AgentDefinition, AnyAgentDefinition as AgentUnion } from './types'
+import { isGeneratorAgent } from './types'
 import { loadUserAgents } from '../utils/user-loader'
+import { executeGeneratorAgent } from '../services/generator-executor'
 
 // Import all built-in agents
 import { councilAgent } from './council-agent'
@@ -20,7 +22,8 @@ import { vglobAgent } from './vglob-agent'
 import { mcpAgent } from './mcp-agent'
 
 // Using loose type to avoid complex generic variance issues
-type AnyAgentDefinition = AgentDefinition<any, any>
+// Supports both async execute() and generator handleSteps() agents
+type AnyAgentDefinition = AgentUnion<any, any>
 
 /**
  * Built-in agents (always available)
@@ -77,12 +80,13 @@ export type AgentName = string
 /**
  * Get agent definition by name
  */
-export function getAgent(name: string): AgentDefinition | undefined {
+export function getAgent(name: string): AnyAgentDefinition | undefined {
   return agentMap.get(name)
 }
 
 /**
  * Execute an agent by name
+ * Automatically routes to generator executor for handleSteps agents
  */
 export async function executeAgent(
   name: string,
@@ -107,7 +111,25 @@ export async function executeAgent(
     }
   }
 
-  return agent.execute(parsed.data as never, context)
+  // Route to appropriate executor
+  if (isGeneratorAgent(agent)) {
+    return executeGeneratorAgent({
+      agent,
+      params: parsed.data as Record<string, unknown>,
+      prompt: (parsed.data as any)?.prompt,
+      context,
+    })
+  }
+
+  // Legacy async execute - must be an AgentDefinition with execute
+  if ('execute' in agent && typeof agent.execute === 'function') {
+    return agent.execute(parsed.data as never, context)
+  }
+
+  return {
+    success: false,
+    summary: `Agent ${name} has no executor`,
+  }
 }
 
 /**
@@ -126,9 +148,10 @@ export function getAgentDescriptions(): Record<string, string> {
 
 /**
  * Get rich agent info including parameter schemas for internal negotiation
+ * For generator agents, uses spawnerPrompt and inputSchema if available
  */
-export function getAgentSchemas(): Record<string, { description: string; params: Record<string, string> }> {
-  const result: Record<string, { description: string; params: Record<string, string> }> = {}
+export function getAgentSchemas(): Record<string, { description: string; spawnerPrompt?: string; params: Record<string, string> }> {
+  const result: Record<string, { description: string; spawnerPrompt?: string; params: Record<string, string> }> = {}
 
   for (const agent of allAgents) {
     if (agent.name === 'council') continue // Skip internal agent
@@ -145,8 +168,12 @@ export function getAgentSchemas(): Record<string, { description: string; params:
       }
     }
 
+    // For generator agents, include spawnerPrompt
+    const spawnerPrompt = isGeneratorAgent(agent) ? agent.spawnerPrompt : undefined
+
     result[agent.name] = {
-      description: agent.description,
+      description: spawnerPrompt || agent.description,
+      spawnerPrompt,
       params,
     }
   }
