@@ -58,8 +58,8 @@ export interface CodeReviewerResult {
 }
 
 export const codeReviewerAgent = defineAgent<typeof codeReviewerParams, CodeReviewerResult>({
-  name: 'code_reviewer',
-  description: 'Review code for security vulnerabilities, bugs, and best practices. Security-focused.',
+  name: 'reviewer',
+  description: 'Review code, plans, or approaches. Identifies issues, suggests improvements, validates correctness.',
   systemPrompt: CODE_REVIEWER_SYSTEM_PROMPT,
   parameters: codeReviewerParams,
 
@@ -77,7 +77,7 @@ export const codeReviewerAgent = defineAgent<typeof codeReviewerParams, CodeRevi
     }
 
     const result = await executeAgentLLM({
-      name: 'code_reviewer',
+      name: 'reviewer',
       systemPrompt: CODE_REVIEWER_SYSTEM_PROMPT,
       userPrompt,
       context: agentContext,

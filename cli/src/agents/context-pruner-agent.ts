@@ -44,8 +44,8 @@ export interface ContextPrunerResult {
   tokenEstimate: number
 }
 
-export const contextPrunerAgent = defineAgent<typeof contextPrunerParams, ContextPrunerResult>({
-  name: 'context_pruner',
+export const compactAgent = defineAgent<typeof contextPrunerParams, ContextPrunerResult>({
+  name: 'compact',
   description: 'Compress and optimize context for LLM calls. Reduces token usage while preserving critical info.',
   systemPrompt: CONTEXT_PRUNER_SYSTEM_PROMPT,
   parameters: contextPrunerParams,
@@ -62,7 +62,7 @@ ${params.context}
 Compress this context while preserving information critical to the current task.`
 
     const result = await executeAgentLLM({
-      name: 'context_pruner',
+      name: 'compact',
       systemPrompt: CONTEXT_PRUNER_SYSTEM_PROMPT,
       userPrompt,
       context: agentContext,

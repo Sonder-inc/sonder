@@ -32,6 +32,7 @@ export {
   getAgent,
   getAgentNames,
   getAgentDescriptions,
+  getAgentSchemas,
   initAgentRegistry,
 } from './registry'
 export type { AgentName } from './registry'
@@ -40,19 +41,20 @@ export type { AgentName } from './registry'
 export type { AgentResult, AgentContext, AgentDefinition } from './types'
 export { defineAgent } from './types'
 
-// Built-in agents - exported for direct use
-export { planAgent } from './plan-agent'
-export { explorerAgent } from './explorer-agent'
-export { hackerAgent } from './hacker-agent'
-export { researcherWebAgent } from './researcher-web-agent'
-export { codeReviewerAgent } from './code-reviewer-agent'
-export { interrogatorAgent } from './interrogator-agent'
+// Built-in agents
+export { councilAgent } from './council-agent'
 export { bestOfNAgent } from './best-of-n-agent'
-export { contextPrunerAgent } from './context-pruner-agent'
-
-// Pentesting agents
-export { nmapAgent } from './nmap-agent'
-export { gobusterAgent } from './gobuster-agent'
-export { niktoAgent } from './nikto-agent'
-export { hydraAgent } from './hydra-agent'
-export { searchsploitAgent } from './searchsploit-agent'
+export { codeReviewerAgent } from './code-reviewer-agent'
+export { commanderAgent } from './commander-agent'
+export { editorAgent } from './editor-agent'
+export { searchFetchAgent } from './researcher-web-agent'
+export { compactAgent } from './context-pruner-agent'
+export { interrogatorAgent } from './interrogator-agent'
+export { hinterAgent } from './hinter-agent'
+export { reconAgent } from './recon-agent'
+export { cryptoAgent } from './crypto-agent'
+export { reverseAgent } from './reverse-agent'
+export { seAgent } from './se-agent'
+export { vgrepAgent } from './vgrep-agent'
+export { vglobAgent } from './vglob-agent'
+export { mcpAgent } from './mcp-agent'

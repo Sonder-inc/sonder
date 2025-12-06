@@ -42,9 +42,9 @@ export interface ResearcherResult {
   nextSteps: string[]
 }
 
-export const researcherWebAgent = defineAgent<typeof researcherParams, ResearcherResult>({
-  name: 'researcher_web',
-  description: 'Analyze web search results and content. Extracts key information and synthesizes findings.',
+export const searchFetchAgent = defineAgent<typeof researcherParams, ResearcherResult>({
+  name: 'search_fetch',
+  description: 'Search the web and fetch content. Analyzes results and synthesizes findings.',
   systemPrompt: RESEARCHER_SYSTEM_PROMPT,
   parameters: researcherParams,
 
@@ -63,7 +63,7 @@ export const researcherWebAgent = defineAgent<typeof researcherParams, Researche
     }
 
     const result = await executeAgentLLM({
-      name: 'researcher_web',
+      name: 'search_fetch',
       systemPrompt: RESEARCHER_SYSTEM_PROMPT,
       userPrompt,
       context,

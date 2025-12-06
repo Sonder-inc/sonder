@@ -7,7 +7,7 @@ const INTERROGATOR_SYSTEM_PROMPT = `You are a clarification agent. Your job is t
 When given a user request, you:
 1. Identify what's unclear or underspecified
 2. Consider different interpretations
-3. Generate targeted questions to resolve ambiguity
+3. Generate targeted questions to resolve ambiguity (max 4 questions)
 4. Prioritize questions by importance
 
 For technical/pentesting tasks, consider:
@@ -22,9 +22,13 @@ Output format (JSON):
   "ambiguities": ["list of unclear points"],
   "questions": [
     {
-      "question": "the question",
-      "why": "why this matters",
-      "options": ["possible answers", "if applicable"],
+      "id": "unique_id",
+      "header": "short label (max 12 chars, e.g. 'Scope', 'Method')",
+      "question": "the full question",
+      "options": [
+        { "label": "Option 1", "description": "what this means" },
+        { "label": "Option 2", "description": "what this means" }
+      ],
       "priority": "high|medium|low"
     }
   ],
@@ -32,7 +36,11 @@ Output format (JSON):
   "canProceed": true/false
 }
 
-Only output JSON, nothing else.`
+Rules:
+- Keep headers very short (max 12 chars)
+- Each question should have 2-4 options
+- Options need both label and description
+- Only output JSON, nothing else.`
 
 const interrogatorParams = z.object({
   userRequest: z.string().describe('The user\'s request to clarify'),
@@ -42,10 +50,16 @@ const interrogatorParams = z.object({
 
 type InterrogatorParams = z.infer<typeof interrogatorParams>
 
+export interface QuestionOption {
+  label: string
+  description: string
+}
+
 export interface ClarificationQuestion {
+  id: string
+  header: string
   question: string
-  why: string
-  options?: string[]
+  options: QuestionOption[]
   priority: 'high' | 'medium' | 'low'
 }
 

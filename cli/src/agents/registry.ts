@@ -1,22 +1,23 @@
 import type { AgentContext, AgentResult, AgentDefinition } from './types'
 import { loadUserAgents } from '../utils/user-loader'
 
-// Import all built-in agents here
-import { planAgent } from './plan-agent'
-import { explorerAgent } from './explorer-agent'
-import { researcherWebAgent } from './researcher-web-agent'
-import { codeReviewerAgent } from './code-reviewer-agent'
-import { contextPrunerAgent } from './context-pruner-agent'
-import { interrogatorAgent } from './interrogator-agent'
+// Import all built-in agents
+import { councilAgent } from './council-agent'
 import { bestOfNAgent } from './best-of-n-agent'
-import { hackerAgent } from './hacker-agent'
-
-// Pentesting agents
-import { nmapAgent } from './nmap-agent'
-import { gobusterAgent } from './gobuster-agent'
-import { searchsploitAgent } from './searchsploit-agent'
-import { niktoAgent } from './nikto-agent'
-import { hydraAgent } from './hydra-agent'
+import { codeReviewerAgent } from './code-reviewer-agent'
+import { commanderAgent } from './commander-agent'
+import { editorAgent } from './editor-agent'
+import { searchFetchAgent } from './researcher-web-agent'
+import { compactAgent } from './context-pruner-agent'
+import { interrogatorAgent } from './interrogator-agent'
+import { hinterAgent } from './hinter-agent'
+import { reconAgent } from './recon-agent'
+import { cryptoAgent } from './crypto-agent'
+import { reverseAgent } from './reverse-agent'
+import { seAgent } from './se-agent'
+import { vgrepAgent } from './vgrep-agent'
+import { vglobAgent } from './vglob-agent'
+import { mcpAgent } from './mcp-agent'
 
 // Using loose type to avoid complex generic variance issues
 type AnyAgentDefinition = AgentDefinition<any, any>
@@ -25,20 +26,22 @@ type AnyAgentDefinition = AgentDefinition<any, any>
  * Built-in agents (always available)
  */
 const builtInAgents: AnyAgentDefinition[] = [
-  planAgent,
-  explorerAgent,
-  researcherWebAgent,
-  codeReviewerAgent,
-  contextPrunerAgent,
-  interrogatorAgent,
+  councilAgent,
   bestOfNAgent,
-  hackerAgent,
-  // Pentesting agents
-  nmapAgent,
-  gobusterAgent,
-  searchsploitAgent,
-  niktoAgent,
-  hydraAgent,
+  codeReviewerAgent,
+  commanderAgent,
+  editorAgent,
+  searchFetchAgent,
+  compactAgent,
+  interrogatorAgent,
+  hinterAgent,
+  reconAgent,
+  cryptoAgent,
+  reverseAgent,
+  seAgent,
+  vgrepAgent,
+  vglobAgent,
+  mcpAgent,
 ]
 
 // Runtime registry (populated on init)
@@ -119,6 +122,36 @@ export function getAgentNames(): string[] {
  */
 export function getAgentDescriptions(): Record<string, string> {
   return Object.fromEntries(allAgents.map(a => [a.name, a.description]))
+}
+
+/**
+ * Get rich agent info including parameter schemas for internal negotiation
+ */
+export function getAgentSchemas(): Record<string, { description: string; params: Record<string, string> }> {
+  const result: Record<string, { description: string; params: Record<string, string> }> = {}
+
+  for (const agent of allAgents) {
+    if (agent.name === 'council') continue // Skip internal agent
+
+    // Extract param descriptions from zod schema
+    const params: Record<string, string> = {}
+    const shape = (agent.parameters as any)?._def?.shape?.()
+
+    if (shape) {
+      for (const [key, value] of Object.entries(shape)) {
+        const desc = (value as any)?._def?.description || (value as any)?.description
+        const typeName = (value as any)?._def?.typeName || 'unknown'
+        params[key] = desc || typeName
+      }
+    }
+
+    result[agent.name] = {
+      description: agent.description,
+      params,
+    }
+  }
+
+  return result
 }
 
 /**
