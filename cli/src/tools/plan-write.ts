@@ -13,8 +13,8 @@ const planWriteParams = z.object({
 })
 
 export const planWrite = defineTool({
-  name: 'plan',
-  description: 'Update the plan displayed during streaming. Pass items array to set plan, pass empty array [] to clear. Mark items in_progress when working, completed when done. Plan auto-clears when all items completed.',
+  name: 'todoWrite',
+  description: 'Update the task list displayed during streaming. Pass items array to set tasks, pass empty array [] to clear. Mark items in_progress when working, completed when done. Auto-clears when all items completed.',
   parameters: planWriteParams,
   execute: async ({ items }): Promise<ToolResult> => {
     const store = usePlanStore.getState()
@@ -26,6 +26,7 @@ export const planWrite = defineTool({
         success: true,
         summary: 'Plan cleared',
         fullResult: 'Plan cleared',
+        displayInput: 'clear',
       }
     }
 
@@ -43,6 +44,7 @@ export const planWrite = defineTool({
         success: true,
         summary: 'Plan completed',
         fullResult: 'All items done, plan cleared',
+        displayInput: `${planItems.length} items`,
       }
     }
 
@@ -52,6 +54,7 @@ export const planWrite = defineTool({
       success: true,
       summary: `Plan: ${completed}/${planItems.length} done`,
       fullResult: `Plan updated. ${planItems.length} items.`,
+      displayInput: `${planItems.length} items`,
     }
   },
 })

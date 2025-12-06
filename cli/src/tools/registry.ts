@@ -3,13 +3,10 @@ import type { ToolResult, ToolDefinition } from './types'
 import { loadUserTools } from '../utils/user-loader'
 
 // Import all built-in tools here
-import { searchOnline } from './search-online'
 import { planWrite } from './plan-write'
-import { globMatcher } from './glob-matcher'
-import { filePicker } from './file-picker'
-import { commander } from './commander'
-import { editor } from './editor'
-import { grep } from './grep'
+import { flashGrep } from './flash-grep'
+import { explore } from './explore'
+import { spawnAgent } from './spawn-agent'
 
 // Using loose array type to avoid complex generic variance issues
 type AnyToolDefinition = ToolDefinition<any>
@@ -18,13 +15,10 @@ type AnyToolDefinition = ToolDefinition<any>
  * Built-in tools (always available)
  */
 const builtInTools: AnyToolDefinition[] = [
-  searchOnline,
   planWrite,
-  globMatcher,
-  filePicker,
-  commander,
-  editor,
-  grep,
+  flashGrep,
+  explore,
+  spawnAgent,
 ]
 
 // Runtime registry (populated on init)

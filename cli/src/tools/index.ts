@@ -39,10 +39,7 @@ export type { ToolResult, ToolDefinition } from './types'
 export { defineTool } from './types'
 
 // Built-in tools
-export { searchOnline } from './search-online'
 export { planWrite } from './plan-write'
-export { globMatcher } from './glob-matcher'
-export { grep } from './grep'
-export { filePicker } from './file-picker'
-export { commander } from './commander'
-export { editor } from './editor'
+export { flashGrep } from './flash-grep'
+export { explore } from './explore'
+export { spawnAgent } from './spawn-agent'

@@ -16,6 +16,11 @@ export interface ToolResult {
   success: boolean
   summary: string
   fullResult: string
+  // UI display customization
+  displayName?: string // Override tool name in UI (e.g., "Read" instead of "flash_grep")
+  displayInput?: string // Clean input display (e.g., file path, pattern)
+  displayMiddle?: string // Content between tool line and summary
+  displayColor?: 'default' | 'success' | 'error' // Indicator color (default=white, success=green, error=red)
   fileStats?: FileChangeStats // Optional file change tracking
 }
 
