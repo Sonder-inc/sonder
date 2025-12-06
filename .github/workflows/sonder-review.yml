@@ -1,0 +1,73 @@
+name: Sonder Code Review
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Don't run on commits made by this workflow
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for diff
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Get changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+
+          # Get changed files (exclude workflows and lock files)
+          FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -v '^\.github/' | grep -v 'bun\.lockb' | grep -v 'package-lock\.json' || true)
+
+          if [ -z "$FILES" ]; then
+            echo "No relevant files changed"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changed files:"
+            echo "$FILES"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            # Store files in output (escape newlines)
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Sonder Analysis
+        if: steps.changed.outputs.has_changes == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PROMPT="Review these changed files for bugs, security issues, code quality, and potential improvements.
+
+          Changed files:
+          ${{ steps.changed.outputs.files }}
+
+          If you find significant issues that should be fixed:
+          1. Read the files using the file tools
+          2. Analyze the code for problems
+          3. If fixes are needed, create a new branch, make the changes, and create a PR using gh CLI
+
+          If the code looks good, just report that no issues were found."
+
+          echo "Running sonder analysis..."
+          bun run cli/src/index.tsx --headless "$PROMPT"
