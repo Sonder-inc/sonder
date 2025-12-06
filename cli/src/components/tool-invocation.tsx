@@ -69,6 +69,9 @@ export const ToolInvocation = ({
   // Use displayName if provided, otherwise use toolName
   const nameToShow = displayName ?? toolName
 
+  // Status-only mode: just show bullet + message (no tool name, no summary)
+  const isStatusOnly = displayName === ''
+
   // Determine indicator color
   const getIndicatorColor = () => {
     if (status === 'executing') return theme.accent
@@ -83,6 +86,18 @@ export const ToolInvocation = ({
 
   // Summary color: grey if no expandable content, otherwise normal
   const summaryColor = fullResult ? theme.foreground : theme.muted
+
+  // Status-only display: ● message
+  if (isStatusOnly) {
+    return (
+      <text style={{ wrapMode: 'word', marginBottom: 1 }}>
+        <span fg={status === 'executing' && !blinkOn ? theme.background : getIndicatorColor()}>
+          {'●'}{' '}
+        </span>
+        <span fg={theme.foreground}>{inputDisplay}</span>
+      </text>
+    )
+  }
 
   return (
     <box style={{ flexDirection: 'column', marginBottom: 1 }}>

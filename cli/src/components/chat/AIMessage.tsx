@@ -1,9 +1,11 @@
+import { useState, useCallback } from 'react'
 import { useTheme } from '../../hooks/use-theme'
 import { ToolInvocation } from '../tool-invocation'
 import { ThinkingIndicator } from '../thinking-indicator'
 import { InterruptedIndicator } from './InterruptedIndicator'
 import { FeedbackIndicator } from './FeedbackIndicator'
 import { Markdown } from '../markdown'
+import { copyToClipboard } from '../../utils/clipboard'
 import type { ToolCall, FeedbackValue } from '../../types/chat'
 
 interface AIMessageProps {
@@ -42,6 +44,18 @@ export const AIMessage = ({
   isLastMessage,
 }: AIMessageProps) => {
   const theme = useTheme()
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(() => {
+    if (!content || isStreaming) return
+    void copyToClipboard(content).then((success) => {
+      if (success) {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }
+    })
+  }, [content, isStreaming])
+
   // Only show thinking indicator after streaming completes (for expandable "Thought for Xs")
   // During streaming, thinking is shown in StreamingStatus
   const showThinkingIndicator = !isStreaming && thinkingContent
@@ -58,9 +72,10 @@ export const AIMessage = ({
           onToggleExpand={() => onToggleExpandThinking(messageId)}
         />
       )}
-      {/* AI message content with markdown */}
+      {/* AI message content with markdown - click to copy */}
       {content && (
-        <box style={{ flexDirection: 'column' }}>
+        <box style={{ flexDirection: 'column' }} onMouseDown={handleCopy}>
+          {copied && <text style={{ fg: theme.success }}>copied*</text>}
           {isStreaming ? (
             // While streaming, show plain text with cursor
             <text style={{ fg: theme.muted, wrapMode: 'word' }}>

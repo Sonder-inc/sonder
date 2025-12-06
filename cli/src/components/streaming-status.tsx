@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ShimmerText } from './shimmer-text'
 import { useTheme } from '../hooks/use-theme'
-import { usePlanStore } from '../state/plan-store'
+import { useSubgoalStore } from '../state/subgoal-store'
 
 interface StreamingStatusProps {
   flavorWord: string
@@ -25,7 +25,8 @@ export const StreamingStatus = ({ flavorWord, startTime, tokenCount, isThinking 
     }, 80)
     return () => clearInterval(interval)
   }, [isThinking])
-  const { items } = usePlanStore()
+  const { subgoals } = useSubgoalStore()
+  const subgoalList = Object.values(subgoals)
 
   // Update elapsed time every second
   useEffect(() => {
@@ -43,18 +44,20 @@ export const StreamingStatus = ({ flavorWord, startTime, tokenCount, isThinking 
     return String(count)
   }
 
-  const hasPlan = items.length > 0
-  const inProgressItem = items.find(i => i.status === 'in_progress')
-  // Use in-progress item as flavor word when planning
-  const displayWord = inProgressItem ? inProgressItem.content : flavorWord
+  const hasSubgoals = subgoalList.length > 0
+  const inProgressSubgoal = subgoalList.find(s => s.status === 'in_progress')
+  // Use in-progress subgoal as flavor word
+  const displayWord = inProgressSubgoal?.objective || flavorWord
 
   // Get checkbox and apply strikethrough for completed
-  const getCheckbox = (status: 'pending' | 'in_progress' | 'completed') => {
+  const getCheckbox = (status: 'pending' | 'in_progress' | 'completed' | 'blocked') => {
     switch (status) {
       case 'completed':
         return '☑'
       case 'in_progress':
         return '☐'
+      case 'blocked':
+        return '☒'
       case 'pending':
         return '□'
     }
@@ -78,38 +81,45 @@ export const StreamingStatus = ({ flavorWord, startTime, tokenCount, isThinking 
           </span>
         </text>
       )}
-      {/* Flavor word or current plan item */}
+      {/* Flavor word or current subgoal */}
       <box style={{ flexDirection: 'row' }}>
         <text>
           <ShimmerText text={displayWord} primaryColor={theme.accent} interval={100} />
         </text>
         <text style={{ fg: theme.muted }}>
-          {hasPlan
+          {hasSubgoals
             ? ' (esc to interrupt)'
             : ` (esc to interrupt ${elapsed}s ${tokenCount > 0 ? '↓' : '↑'}${formatTokens(tokenCount)}toks)`
           }
         </text>
       </box>
 
-      {/* Plan items - max 8 */}
-      {hasPlan && items.slice(0, 8).map((item, index) => {
-        const checkbox = getCheckbox(item.status)
+      {/* Subgoals - max 8 */}
+      {hasSubgoals && subgoalList.slice(0, 8).map((subgoal, index) => {
+        const checkbox = getCheckbox(subgoal.status)
         const isFirst = index === 0
         const prefix = isFirst ? '└' : ' '
-        const isCompleted = item.status === 'completed'
-        const isInProgress = item.status === 'in_progress'
-        const content = isCompleted ? strikethrough(item.content) : item.content
+        const isCompleted = subgoal.status === 'completed'
+        const isInProgress = subgoal.status === 'in_progress'
+        const isBlocked = subgoal.status === 'blocked'
+        const content = isCompleted ? strikethrough(subgoal.objective) : subgoal.objective
+        const statusColor = isBlocked ? theme.error : (isCompleted ? theme.muted : (isInProgress ? theme.accent : theme.muted))
 
         return (
-          <box key={item.id} style={{ height: 1 }}>
+          <box key={subgoal.id} style={{ height: 1 }}>
             <text>
               <span fg={theme.muted}>{`  ${prefix} `}</span>
-              <span fg={isCompleted ? theme.muted : (isInProgress ? theme.foreground : theme.muted)}>
+              <span fg={statusColor}>
                 {checkbox}
               </span>
-              <span fg={isCompleted ? theme.muted : (isInProgress ? theme.foreground : theme.muted)}>
+              <span fg={statusColor}>
                 {` ${content}`}
               </span>
+              {subgoal.logs.length > 0 && (
+                <span fg={theme.muted}>
+                  {` (${subgoal.logs.length} logs)`}
+                </span>
+              )}
             </text>
           </box>
         )

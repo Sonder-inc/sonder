@@ -48,22 +48,30 @@ export const ThinkingIndicator = ({
 
   const displayDuration = status === 'thinking' ? `${elapsed}s` : formatDuration(durationMs)
 
+  const handleClick = () => {
+    if (status === 'complete' && content && onToggleExpand) {
+      onToggleExpand()
+    }
+  }
+
   return (
     <box style={{ flexDirection: 'column', marginBottom: 1 }}>
-      {/* Thinking status line */}
-      <text style={{ wrapMode: 'none' }}>
-        <span fg={theme.muted}>
-          {status === 'thinking' ? SPINNER_FRAMES[spinnerFrame] : '∴'}{' '}
-        </span>
-        <span fg={theme.muted}>
-          {status === 'thinking' ? 'Thinking' : 'Thought'} for {displayDuration}
-        </span>
-        {status === 'complete' && content && (
-          <span fg={theme.muted} attributes={TextAttributes.DIM}>
-            {' '}(ctrl+o to {expanded ? 'hide' : 'show'} thinking)
+      {/* Thinking status line - click to expand */}
+      <box onMouseDown={handleClick}>
+        <text style={{ wrapMode: 'none' }}>
+          <span fg={theme.muted}>
+            {status === 'thinking' ? SPINNER_FRAMES[spinnerFrame] : '∴'}{' '}
           </span>
-        )}
-      </text>
+          <span fg={theme.muted}>
+            {status === 'thinking' ? 'Thinking' : 'Thought'} for {displayDuration}
+          </span>
+          {status === 'complete' && content && (
+            <span fg={theme.muted} attributes={TextAttributes.DIM}>
+              {' '}(click to {expanded ? 'hide' : 'show'})
+            </span>
+          )}
+        </text>
+      </box>
 
       {/* Expanded thinking content */}
       {expanded && content && (

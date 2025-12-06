@@ -5,7 +5,7 @@
  * Displays questions in a wizard-style format with navigation.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useKeyboard } from '@opentui/react'
 import type { KeyEvent } from '@opentui/core'
 import { useTheme } from '../hooks/use-theme'
@@ -18,8 +18,16 @@ export const QuestionWizard = ({ questions, onComplete, onCancel }: QuestionWiza
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [selectedOptionIndex, setSelectedOptionIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [isTyping, setIsTyping] = useState(false)
   const [customInput, setCustomInput] = useState('')
+  const [cursorVisible, setCursorVisible] = useState(true)
+
+  // Blink cursor when on "Type something" option
+  const isOnCustomOption = selectedOptionIndex === questions[currentQuestionIndex].options.length
+  useEffect(() => {
+    if (!isOnCustomOption) return
+    const interval = setInterval(() => setCursorVisible(v => !v), 500)
+    return () => clearInterval(interval)
+  }, [isOnCustomOption])
 
   const currentQuestion = questions[currentQuestionIndex]
   const totalOptions = currentQuestion.options.length + (currentQuestion.allowCustom !== false ? 1 : 0)
@@ -28,79 +36,75 @@ export const QuestionWizard = ({ questions, onComplete, onCancel }: QuestionWiza
   useKeyboard(
     useCallback(
       (key: KeyEvent) => {
-        // Handle custom input mode
-        if (isTyping) {
-          if (key.name === 'escape') {
-            setIsTyping(false)
-            setCustomInput('')
-          } else if (key.name === 'return') {
-            if (customInput.trim()) {
-              const newAnswers = { ...answers, [currentQuestion.id]: customInput.trim() }
-              setAnswers(newAnswers)
-              setCustomInput('')
-              setIsTyping(false)
+        const isCustomOption = selectedOptionIndex === currentQuestion.options.length
 
-              // Move to next question or complete
-              if (currentQuestionIndex < questions.length - 1) {
-                setCurrentQuestionIndex(currentQuestionIndex + 1)
-                setSelectedOptionIndex(0)
-              } else {
-                onComplete(newAnswers)
-              }
-            }
-          } else if (key.name === 'backspace') {
-            setCustomInput(prev => prev.slice(0, -1))
-          } else if (key.sequence && key.sequence.length === 1 && !key.ctrl && !key.meta) {
-            setCustomInput(prev => prev + key.sequence)
-          }
-          return
-        }
-
-        // Navigation mode
+        // Escape: cancel typing or cancel wizard
         if (key.name === 'escape') {
-          onCancel()
-          return
-        }
-
-        if (key.name === 'up' || key.name === 'k') {
-          setSelectedOptionIndex(prev => Math.max(0, prev - 1))
-        } else if (key.name === 'down' || key.name === 'j') {
-          setSelectedOptionIndex(prev => Math.min(totalOptions - 1, prev + 1))
-        } else if (key.name === 'left' || key.name === 'h') {
-          // Go to previous question
-          if (currentQuestionIndex > 0) {
-            setCurrentQuestionIndex(currentQuestionIndex - 1)
-            setSelectedOptionIndex(0)
-          }
-        } else if (key.name === 'right' || key.name === 'l') {
-          // Go to next question if answered
-          if (answers[currentQuestion.id] && currentQuestionIndex < questions.length - 1) {
-            setCurrentQuestionIndex(currentQuestionIndex + 1)
-            setSelectedOptionIndex(0)
-          }
-        } else if (key.name === 'return') {
-          // Check if selecting "Type something" option
-          const isCustomOption = selectedOptionIndex === currentQuestion.options.length
-          if (isCustomOption && currentQuestion.allowCustom !== false) {
-            setIsTyping(true)
+          if (isCustomOption && customInput) {
             setCustomInput('')
           } else {
-            // Select the option
-            const selectedOption = currentQuestion.options[selectedOptionIndex]
-            const newAnswers = { ...answers, [currentQuestion.id]: selectedOption.label }
-            setAnswers(newAnswers)
+            onCancel()
+          }
+          return
+        }
 
-            // Move to next question or complete
+        // When on custom option, handle typing
+        if (isCustomOption && currentQuestion.allowCustom !== false) {
+          if (key.name === 'return' && customInput.trim()) {
+            const newAnswers = { ...answers, [currentQuestion.id]: customInput.trim() }
+            setAnswers(newAnswers)
+            setCustomInput('')
+
             if (currentQuestionIndex < questions.length - 1) {
               setCurrentQuestionIndex(currentQuestionIndex + 1)
               setSelectedOptionIndex(0)
             } else {
               onComplete(newAnswers)
             }
+            return
+          } else if (key.name === 'backspace') {
+            setCustomInput(prev => prev.slice(0, -1))
+            return
+          } else if (key.sequence && key.sequence.length === 1 && !key.ctrl && !key.meta) {
+            setCustomInput(prev => prev + key.sequence)
+            return
+          }
+        }
+
+        // Navigation
+        if (key.name === 'up' || key.name === 'k') {
+          setSelectedOptionIndex(prev => Math.max(0, prev - 1))
+          setCustomInput('')
+        } else if (key.name === 'down' || key.name === 'j') {
+          setSelectedOptionIndex(prev => Math.min(totalOptions - 1, prev + 1))
+          setCustomInput('')
+        } else if (key.name === 'left' || key.name === 'h') {
+          if (currentQuestionIndex > 0) {
+            setCurrentQuestionIndex(currentQuestionIndex - 1)
+            setSelectedOptionIndex(0)
+            setCustomInput('')
+          }
+        } else if (key.name === 'right' || key.name === 'l') {
+          if (answers[currentQuestion.id] && currentQuestionIndex < questions.length - 1) {
+            setCurrentQuestionIndex(currentQuestionIndex + 1)
+            setSelectedOptionIndex(0)
+            setCustomInput('')
+          }
+        } else if (key.name === 'return' && !isCustomOption) {
+          // Select regular option
+          const selectedOption = currentQuestion.options[selectedOptionIndex]
+          const newAnswers = { ...answers, [currentQuestion.id]: selectedOption.label }
+          setAnswers(newAnswers)
+
+          if (currentQuestionIndex < questions.length - 1) {
+            setCurrentQuestionIndex(currentQuestionIndex + 1)
+            setSelectedOptionIndex(0)
+          } else {
+            onComplete(newAnswers)
           }
         } else if (key.name === 'tab') {
-          // Tab cycles through options
           setSelectedOptionIndex(prev => (prev + 1) % totalOptions)
+          setCustomInput('')
         }
       },
       [
@@ -109,7 +113,6 @@ export const QuestionWizard = ({ questions, onComplete, onCancel }: QuestionWiza
         selectedOptionIndex,
         totalOptions,
         answers,
-        isTyping,
         customInput,
         questions.length,
         onComplete,
@@ -120,39 +123,6 @@ export const QuestionWizard = ({ questions, onComplete, onCancel }: QuestionWiza
 
   const allAnswered = questions.every(q => answers[q.id] !== undefined)
   const canGoRight = answers[currentQuestion.id] && currentQuestionIndex < questions.length - 1
-
-  // Render custom input mode
-  if (isTyping) {
-    return (
-      <box style={{ flexDirection: 'column', marginLeft: 1 }}>
-        {/* Header */}
-        <box style={{ flexDirection: 'row', marginBottom: 1 }}>
-          <text style={{ fg: currentQuestionIndex > 0 ? theme.foreground : theme.muted }}>{'← '}</text>
-          {questions.map((q, idx) => {
-            const isComplete = answers[q.id] !== undefined
-            const isCurrent = idx === currentQuestionIndex
-            const icon = isComplete ? '■' : '□'
-            const color = isCurrent ? theme.accent : isComplete ? theme.success : theme.muted
-            return (
-              <text key={q.id} style={{ fg: color }}>
-                {icon} {q.header}{idx < questions.length - 1 ? ' ' : ''}
-              </text>
-            )
-          })}
-          <text style={{ fg: allAnswered ? theme.success : theme.muted }}> {allAnswered ? '✓' : '○'} Submit</text>
-          <text style={{ fg: canGoRight ? theme.foreground : theme.muted }}> →</text>
-        </box>
-
-        <text style={{ fg: theme.foreground, marginBottom: 1 }}>{currentQuestion.question}</text>
-        <box style={{ flexDirection: 'row', marginTop: 1 }}>
-          <text style={{ fg: theme.accent }}>{'> '}</text>
-          <text style={{ fg: theme.foreground }}>{customInput}</text>
-          <text style={{ fg: theme.accent }}>_</text>
-        </box>
-        <text style={{ fg: theme.muted, marginTop: 2 }}>Enter to submit · Esc to cancel</text>
-      </box>
-    )
-  }
 
   return (
     <box style={{ flexDirection: 'column', marginLeft: 1 }}>
@@ -196,20 +166,33 @@ export const QuestionWizard = ({ questions, onComplete, onCancel }: QuestionWiza
           )
         })}
         {currentQuestion.allowCustom !== false && (
-          <box style={{ flexDirection: 'row' }}>
-            <text style={{ fg: selectedOptionIndex === currentQuestion.options.length ? theme.accent : theme.muted }}>
-              {selectedOptionIndex === currentQuestion.options.length ? '❯' : ' '}{' '}
-            </text>
-            <text style={{ fg: selectedOptionIndex === currentQuestion.options.length ? theme.accent : theme.foreground }}>
-              {currentQuestion.options.length + 1}. Type something.
-            </text>
+          <box style={{ flexDirection: 'column' }}>
+            <box style={{ flexDirection: 'row' }}>
+              <text style={{ fg: isOnCustomOption ? theme.accent : theme.muted }}>
+                {isOnCustomOption ? '❯' : ' '}{' '}
+              </text>
+              <text style={{ fg: isOnCustomOption ? theme.accent : theme.foreground }}>
+                {currentQuestion.options.length + 1}.{' '}
+              </text>
+              {!isOnCustomOption && (
+                <text style={{ fg: theme.muted }}>Type something.</text>
+              )}
+            </box>
+            {isOnCustomOption && (
+              <text style={{ fg: theme.foreground, marginLeft: 4 }}>
+                {customInput.length > 60 ? '...' + customInput.slice(-57) : customInput}
+                <span style={{ fg: cursorVisible ? theme.accent : theme.background }}>_</span>
+              </text>
+            )}
           </box>
         )}
       </box>
 
       {/* Footer */}
       <text style={{ fg: theme.muted, marginTop: 2 }}>
-        Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+        {isOnCustomOption
+          ? 'Enter to submit · Esc to clear'
+          : 'Enter to select · Tab/Arrow keys to navigate · Esc to cancel'}
       </text>
     </box>
   )
