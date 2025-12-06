@@ -28,6 +28,17 @@ const FALLBACK_WORDS = [
   'Dreaming', 'Exploring', 'Discovering', 'Imagining', 'Creating',
 ]
 
+const SUMMARY_PROMPT = `Summarize this conversation in ONE concise sentence (max 60 chars). Focus on the main task/goal accomplished. Use action verbs. No quotes or punctuation at end.
+
+Examples:
+- Implemented user auth with JWT tokens
+- Fixed memory leak in cache layer
+- Explored nmap scanning techniques
+- Analyzed SQLi vulnerability in login
+
+Conversation:
+`
+
 const SMART_SHORTCUT_PROMPT = `You are predicting what the user will ask for next. Based on this conversation, what is the user most likely to request as their next message? Think about:
 - What problem are they solving?
 - What's the natural next step in their workflow?
@@ -76,6 +87,32 @@ export async function getFlavorWord(userMessage: string): Promise<string | null>
     return FALLBACK_WORDS[Math.floor(Math.random() * FALLBACK_WORDS.length)]
   } catch {
     return FALLBACK_WORDS[Math.floor(Math.random() * FALLBACK_WORDS.length)]
+  }
+}
+
+export async function generateConversationSummary(conversationText: string): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) return 'Conversation summary'
+
+  try {
+    const openrouter = createOpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey,
+    })
+
+    const result = await generateText({
+      model: openrouter.chat('anthropic/claude-3.5-haiku'),
+      prompt: SUMMARY_PROMPT + conversationText,
+    })
+
+    // Clean up the response
+    const text = result.text.trim()
+    // Remove leading dash/bullet and trailing punctuation
+    const cleaned = text.replace(/^[-•]\s*/, '').replace(/[.!?]$/, '')
+    // Truncate if too long
+    return cleaned.length > 60 ? cleaned.slice(0, 57) + '...' : cleaned
+  } catch {
+    return 'Conversation summary'
   }
 }
 

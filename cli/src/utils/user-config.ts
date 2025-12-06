@@ -22,12 +22,23 @@ export const USER_DIRS = {
 } as const
 
 /**
+ * API keys configuration
+ */
+export interface ApiKeysConfig {
+  openrouter?: string
+  hackthebox?: string
+  tryhackme?: string
+  firecrawl?: string
+}
+
+/**
  * Default config structure
  */
 export interface SonderConfig {
   defaultModel?: string
   theme?: 'dark' | 'light'
   autoUpdate?: boolean
+  apiKeys?: ApiKeysConfig
   mcpServers?: Record<string, MCPServerConfig>
 }
 
@@ -212,4 +223,77 @@ export function getUserConfigInfo(): {
     tools: listUserFiles('tools').filter(f => !f.isExample).length,
     mcps: listUserFiles('mcps').filter(f => !f.isExample).length,
   }
+}
+
+/**
+ * API key name to environment variable mapping
+ */
+const API_KEY_ENV_MAP: Record<keyof ApiKeysConfig, string> = {
+  openrouter: 'OPENROUTER_API_KEY',
+  hackthebox: 'HTB_API_KEY',
+  tryhackme: 'THM_API_KEY',
+  firecrawl: 'FIRECRAWL_API_KEY',
+}
+
+/**
+ * Load API keys from config into process.env
+ * Called during initialization
+ */
+export function loadApiKeysToEnv(): void {
+  const config = loadConfig()
+  if (!config.apiKeys) return
+
+  for (const [key, envVar] of Object.entries(API_KEY_ENV_MAP)) {
+    const value = config.apiKeys[key as keyof ApiKeysConfig]
+    if (value && !process.env[envVar]) {
+      // Only set if not already set (env vars take precedence)
+      process.env[envVar] = value
+    }
+  }
+}
+
+/**
+ * Get a specific API key (from env or config)
+ */
+export function getApiKey(name: keyof ApiKeysConfig): string | undefined {
+  const envVar = API_KEY_ENV_MAP[name]
+  if (process.env[envVar]) {
+    return process.env[envVar]
+  }
+  const config = loadConfig()
+  return config.apiKeys?.[name]
+}
+
+/**
+ * Set an API key in config
+ */
+export function setApiKey(name: keyof ApiKeysConfig, value: string): void {
+  const config = loadConfig()
+  if (!config.apiKeys) {
+    config.apiKeys = {}
+  }
+  config.apiKeys[name] = value
+  saveConfig(config)
+  // Also set in current process
+  process.env[API_KEY_ENV_MAP[name]] = value
+}
+
+/**
+ * Get all API key statuses (configured or not, masked values)
+ */
+export function getApiKeyStatuses(): Record<keyof ApiKeysConfig, { configured: boolean; source: 'env' | 'config' | 'none' }> {
+  const config = loadConfig()
+  const result: Record<string, { configured: boolean; source: 'env' | 'config' | 'none' }> = {}
+
+  for (const [key, envVar] of Object.entries(API_KEY_ENV_MAP)) {
+    if (process.env[envVar]) {
+      result[key] = { configured: true, source: 'env' }
+    } else if (config.apiKeys?.[key as keyof ApiKeysConfig]) {
+      result[key] = { configured: true, source: 'config' }
+    } else {
+      result[key] = { configured: false, source: 'none' }
+    }
+  }
+
+  return result as Record<keyof ApiKeysConfig, { configured: boolean; source: 'env' | 'config' | 'none' }>
 }
