@@ -8,16 +8,16 @@ const SONDER_LOGO = [
 
 interface WelcomeBannerProps {
   width: number
-  version?: string
-  machineInfo?: string
+  version: string
+  machineInfo: string
   modelInfo?: string
   mode?: string
 }
 
 export const WelcomeBanner = ({
   width,
-  version = '0.1.08',
-  machineInfo = 'home/hacks',
+  version,
+  machineInfo,
   modelInfo = 'max - black',
   mode = 'stealth',
 }: WelcomeBannerProps) => {

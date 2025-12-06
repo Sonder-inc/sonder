@@ -21,9 +21,11 @@ import type { FeedbackValue } from './types/chat'
 
 interface AppProps {
   initialPrompt: string | null
+  version: string
+  launchDir: string
 }
 
-export const App = ({ initialPrompt }: AppProps) => {
+export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
   const { terminalWidth } = useTerminalDimensions()
   const scrollRef = useRef<ScrollBoxRenderable | null>(null)
   const inputRef = useRef<MultilineInputHandle | null>(null)
@@ -229,7 +231,7 @@ export const App = ({ initialPrompt }: AppProps) => {
           }}
         >
           {/* Banner - scrolls with chat */}
-          <WelcomeBanner width={mainWidth} mode={MODES[modeIndex]} />
+          <WelcomeBanner width={mainWidth} mode={MODES[modeIndex]} version={version} machineInfo={launchDir} />
 
           {/* Messages */}
           <MessageList

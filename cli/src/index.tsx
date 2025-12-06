@@ -9,6 +9,7 @@ import { existsSync } from 'fs'
 
 import { App } from './app'
 import { initializeThemeStore } from './hooks/use-theme'
+import { checkForUpdates, performUpdate } from './utils/updater'
 
 // Load .env from parent directory
 const envPath = resolve(import.meta.dir, '../../.env')
@@ -67,6 +68,27 @@ function parseArgs(): ParsedArgs {
 async function main(): Promise<void> {
   const { initialPrompt } = parseArgs()
 
+  // Check for updates on launch
+  try {
+    const updateInfo = await checkForUpdates()
+    if (updateInfo?.available) {
+      console.log(`\x1b[36msonder ${updateInfo.currentVersion} → ${updateInfo.latestVersion}\x1b[0m`)
+      const success = performUpdate(updateInfo.latestVersion)
+      if (success) {
+        console.log('\x1b[32mupdated!\x1b[0m\n')
+        // Re-execute sonder with same args
+        const { spawn } = await import('child_process')
+        spawn(process.argv[0], process.argv.slice(1), {
+          stdio: 'inherit',
+          env: process.env,
+        })
+        process.exit(0)
+      }
+    }
+  } catch {
+    // Silently ignore update failures
+  }
+
   // Initialize theme store before rendering
   initializeThemeStore()
 
@@ -75,7 +97,10 @@ async function main(): Promise<void> {
     exitOnCtrlC: false,
   })
 
-  createRoot(renderer).render(<App initialPrompt={initialPrompt} />)
+  const version = loadPackageVersion()
+  const launchDir = process.cwd()
+
+  createRoot(renderer).render(<App initialPrompt={initialPrompt} version={version} launchDir={launchDir} />)
 }
 
 void main()
