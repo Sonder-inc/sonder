@@ -82,3 +82,7 @@ coverage/
 *.key
 *.cert
 
+# Notes
+notes.txt
+notes/
+
