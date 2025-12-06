@@ -59,6 +59,10 @@ export function useToolExecutor({
         status: toolResult.success ? 'complete' : 'error',
         summary: toolResult.summary,
         fullResult: toolResult.fullResult,
+        displayName: toolResult.displayName,
+        displayInput: toolResult.displayInput,
+        displayMiddle: toolResult.displayMiddle,
+        displayColor: toolResult.displayColor,
       })
 
       // Update thread stats if tool returned file changes

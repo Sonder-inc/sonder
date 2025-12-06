@@ -29,8 +29,41 @@ export type ToolCall = {
   id: string
   toolName: string
   params: Record<string, unknown>
+  // UI display customization
+  displayName?: string // Override tool name in UI
+  displayInput?: string // Clean input display
+  displayMiddle?: string // Content between tool line and summary
+  displayColor?: 'default' | 'success' | 'error' // Indicator color
   status: ToolCallStatus
   summary?: string
   fullResult?: string
   messageId: string // Link to parent AI message
+}
+
+/**
+ * Question option for wizard UI
+ */
+export type QuestionOption = {
+  label: string
+  description?: string
+}
+
+/**
+ * Single question in the wizard
+ */
+export type WizardQuestion = {
+  id: string
+  header: string // Short label like "Scope"
+  question: string
+  options: QuestionOption[]
+  allowCustom?: boolean
+}
+
+/**
+ * Question wizard data for interrogator UI
+ */
+export type QuestionWizardData = {
+  questions: WizardQuestion[]
+  onComplete: (answers: Record<string, string>) => void
+  onCancel: () => void
 }

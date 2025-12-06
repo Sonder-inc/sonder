@@ -25,14 +25,17 @@ interface UseChatHandlerOptions {
 
 const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
-const SYSTEM_PROMPT = `You are Sonder, a helpful AI assistant for cybersecurity and hacking. You have access to tools like search_online.
+const SYSTEM_PROMPT = `You are Sonder, a helpful AI assistant for cybersecurity and hacking.
 
-When you use a tool:
-1. The tool will execute and return results
-2. You will then receive those results
-3. Use the results to answer the user's question directly
+IMPORTANT: When you need to use a tool, CALL IT DIRECTLY. Do not say "I'll use X" or "Let me try X" - just invoke the tool immediately.
 
-IMPORTANT: After receiving tool results, provide your answer based on those results. Do NOT say "let me search" or similar - the search already happened.`
+You have full autonomy to chain multiple tool calls until your task is complete:
+- Call tools directly without announcing them
+- If a tool fails, retry with different parameters or try alternatives
+- Use todoWrite to track multi-step progress
+- Only provide a final text response when you're truly done`
+
+const MAX_TOOL_ITERATIONS = 10 // Prevent infinite loops
 
 export function useChatHandler({
   model,
@@ -83,9 +86,9 @@ export function useChatHandler({
       const newCount = incrementUserMessageCount()
       checkAndGenerateShortcut(content, newCount)
 
-      // Add placeholder AI message
+      // Add placeholder AI message (thinking starts false until we receive reasoning tokens)
       const aiMessageId = generateId()
-      const thinkingStartTime = Date.now()
+      let thinkingStartTime: number | null = null
       addMessage({
         id: aiMessageId,
         variant: 'ai',
@@ -93,7 +96,7 @@ export function useChatHandler({
         timestamp: new Date(),
         isComplete: false,
         isStreaming: true,
-        isThinking: true,
+        isThinking: false,
       })
 
       // Setup streaming
@@ -119,11 +122,11 @@ export function useChatHandler({
           { role: 'user' as const, content },
         ]
 
-        // Tool call loop
+        // Agentic tool call loop - allows multiple iterations
         let continueLoop = true
-        let isFirstCall = true
+        let iterationCount = 0
 
-        while (continueLoop && !abortController.signal.aborted) {
+        while (continueLoop && !abortController.signal.aborted && iterationCount < MAX_TOOL_ITERATIONS) {
           const pendingToolCalls: ToolCallRequest[] = []
 
           const result = await streamChat(
@@ -138,10 +141,15 @@ export function useChatHandler({
                 pendingToolCalls.push(toolCall)
               },
               onReasoning: (chunk) => {
+                // Set thinking true on first reasoning chunk
+                if (thinkingStartTime === null) {
+                  thinkingStartTime = Date.now()
+                  updateMessage(currentMessageId, { isThinking: true })
+                }
                 appendToThinkingContent(chunk)
               },
               onReasoningComplete: () => {
-                const thinkingDuration = Date.now() - thinkingStartTime
+                const thinkingDuration = thinkingStartTime ? Date.now() - thinkingStartTime : 0
                 updateMessage(currentMessageId, {
                   isThinking: false,
                   thinkingDurationMs: thinkingDuration,
@@ -150,24 +158,45 @@ export function useChatHandler({
             },
             model,
             abortController.signal,
-            isFirstCall,
+            true, // Always enable tools for agentic loop
           )
 
           if (result.toolCalls.length > 0) {
-            // Mark thinking message as complete
+            iterationCount++
+            // Mark current message as complete
             updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
 
-            // Execute tool calls and add results to history
-            for (const toolCall of result.toolCalls) {
-              const { result: toolResult } = await executeToolCall(toolCall)
-              chatMessages.push({
-                role: 'user',
-                content: `[Tool Result for ${toolCall.name}]\n${toolResult.fullResult}\n\nNow provide your answer based on these search results.`,
+            // Execute tool calls in parallel and collect results
+            const toolResults = await Promise.all(
+              result.toolCalls.map(async (toolCall) => {
+                const { result: toolResult } = await executeToolCall(toolCall)
+                return { toolCall, toolResult }
               })
-            }
+            )
+
+            // Add all results to history
+            const resultsContent = toolResults
+              .map(({ toolCall, toolResult }) => {
+                const status = toolResult.success ? '✓' : '✗ FAILED'
+                return `[${toolCall.name}] ${status}\n${toolResult.fullResult}`
+              })
+              .join('\n\n---\n\n')
+
+            // Check if any tool failed
+            const anyFailed = toolResults.some(({ toolResult }) => !toolResult.success)
+
+            chatMessages.push({
+              role: 'user',
+              content: `Tool results:\n\n${resultsContent}\n\n${
+                anyFailed
+                  ? 'Some tools failed. Retry with different parameters or try a different tool.'
+                  : 'If you need more tools, call them now. Otherwise give your final answer.'
+              }`,
+            })
 
             // Create new message for AI response
             const answerMessageId = generateId()
+            thinkingStartTime = null // Reset for new message
             addMessage({
               id: answerMessageId,
               variant: 'ai',
@@ -175,13 +204,18 @@ export function useChatHandler({
               timestamp: new Date(),
               isComplete: false,
               isStreaming: true,
+              isThinking: false,
             })
             currentMessageId = answerMessageId
             setStreamingMessageId(answerMessageId)
-            isFirstCall = false
           } else {
             continueLoop = false
           }
+        }
+
+        // Warn if we hit the iteration limit
+        if (iterationCount >= MAX_TOOL_ITERATIONS) {
+          appendToStreamingMessage('\n\n*[Reached maximum tool iterations]*')
         }
 
         updateMessage(currentMessageId, { isComplete: true, isStreaming: false })

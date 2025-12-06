@@ -18,6 +18,7 @@ import { ContextPanel } from './components/panels/ContextPanel'
 import { StatusPanel } from './components/panels/StatusPanel'
 import { ConfigPanel } from './components/panels/ConfigPanel'
 import { SchoolModePanel } from './components/school'
+import { QuestionWizard } from './components/QuestionWizard'
 import { Sidebar } from './components/Sidebar'
 import { SystemInfo } from './components/SystemInfo'
 import { MODELS, MODES, getModelId } from './constants/app-constants'
@@ -99,6 +100,8 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     setSmartShortcut,
     incrementUserMessageCount,
     clearMessages,
+    questionWizard,
+    setQuestionWizard,
   } = useChatStore(
     useShallow((store) => ({
       messages: store.messages,
@@ -124,6 +127,8 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
       setSmartShortcut: store.setSmartShortcut,
       incrementUserMessageCount: store.incrementUserMessageCount,
       clearMessages: store.clearMessages,
+      questionWizard: store.questionWizard,
+      setQuestionWizard: store.setQuestionWizard,
     })),
   )
 
@@ -385,6 +390,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
                 flavorWord={flavorWord}
                 startTime={streamStartTime}
                 tokenCount={tokenCount}
+                isThinking={messages.find(m => m.isStreaming)?.isThinking}
               />
             </box>
           )}
@@ -439,6 +445,21 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
               onSelectPlatform={selectPlatform}
               onSelectMachine={selectMachine}
               onCancel={exitSchoolMode}
+            />
+          )}
+
+          {/* Question wizard panel - triggered by interrogator agent */}
+          {questionWizard && (
+            <QuestionWizard
+              questions={questionWizard.questions}
+              onComplete={(answers) => {
+                questionWizard.onComplete(answers)
+                setQuestionWizard(null)
+              }}
+              onCancel={() => {
+                questionWizard.onCancel()
+                setQuestionWizard(null)
+              }}
             />
           )}
 

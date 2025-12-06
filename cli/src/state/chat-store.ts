@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
-import type { ChatMessage, InputValue, ToolCall } from '../types/chat'
+import type { ChatMessage, InputValue, ToolCall, QuestionWizardData } from '../types/chat'
 import { saveMessage, loadMessages } from '../services/message-persistence'
 
 export type { InputValue, ToolCall }
@@ -22,6 +22,8 @@ export type ChatStoreState = {
   userMessageCount: number
   // Thinking state
   expandedThinkingId: string | null
+  // Question wizard state (for interrogator agent)
+  questionWizard: QuestionWizardData | null
 }
 
 type ChatStoreActions = {
@@ -47,6 +49,8 @@ type ChatStoreActions = {
   // Smart shortcut actions
   setSmartShortcut: (shortcut: string | null) => void
   incrementUserMessageCount: () => number
+  // Question wizard actions
+  setQuestionWizard: (data: QuestionWizardData | null) => void
   reset: () => void
 }
 
@@ -69,6 +73,7 @@ const initialState: ChatStoreState = {
   smartShortcut: null,
   userMessageCount: 0,
   expandedThinkingId: null,
+  questionWizard: null,
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -217,6 +222,11 @@ export const useChatStore = create<ChatStore>()(
       return newCount
     },
 
+    setQuestionWizard: (data) =>
+      set((state) => {
+        state.questionWizard = data
+      }),
+
     reset: () =>
       set((state) => {
         state.messages = []
@@ -231,6 +241,7 @@ export const useChatStore = create<ChatStore>()(
         state.smartShortcut = null
         state.userMessageCount = 0
         state.expandedThinkingId = null
+        state.questionWizard = null
       }),
   })),
 )
