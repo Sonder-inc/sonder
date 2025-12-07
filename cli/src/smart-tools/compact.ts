@@ -48,7 +48,7 @@ export interface ContextPrunerResult {
   tokenEstimate: number
 }
 
-export const compactAgent = defineGeneratorAgent<typeof contextPrunerParams, ContextPrunerResult>({
+export const compact = defineGeneratorAgent<typeof contextPrunerParams, ContextPrunerResult>({
   name: 'compact',
   id: 'compact',
   model: 'anthropic/claude-3.5-haiku',

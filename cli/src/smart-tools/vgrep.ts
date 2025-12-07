@@ -123,7 +123,7 @@ export interface VgrepResult {
   confidence: number
 }
 
-export const vgrepAgent = defineGeneratorAgent<typeof vgrepParams, VgrepResult>({
+export const vgrep = defineGeneratorAgent<typeof vgrepParams, VgrepResult>({
   name: 'vgrep',
   id: 'vgrep',
   model: 'anthropic/claude-3.5-haiku',

@@ -27,8 +27,8 @@ const runTerminalCommandParams = z.object({
   timeout_seconds: z.number().optional().default(30).describe('Timeout in seconds (-1 for no timeout)'),
 })
 
-export const runTerminalCommand = defineTool({
-  name: 'run_terminal_command',
+export const Bash = defineTool({
+  name: 'Bash',
   description: 'Execute a shell command and return its output. Use for running tools, scripts, and system operations.',
   parameters: runTerminalCommandParams,
 

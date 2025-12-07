@@ -46,7 +46,7 @@ export interface ResearcherResult {
   nextSteps: string[]
 }
 
-export const searchFetchAgent = defineGeneratorAgent<typeof researcherParams, ResearcherResult>({
+export const searchFetch = defineGeneratorAgent<typeof researcherParams, ResearcherResult>({
   name: 'search_fetch',
   id: 'search_fetch',
   model: 'anthropic/claude-3.5-haiku',

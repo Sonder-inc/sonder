@@ -5,14 +5,15 @@ import { loadUserTools } from '../utils/user-loader'
 // Import existing built-in tools
 import { addSubgoal, updateSubgoal, strikeSubgoal, clearSubgoals } from './subgoal'
 import { flashGrep } from './flash-grep'
-import { explore } from './explore'
 import { status } from './status'
-import { runTerminalCommand } from './run-terminal-command'
-import { multiToolUseParallel } from './multi-tool-use'
+import { Bash } from './bash'
+import { batchTool } from './batch'
+import { Read, Write, Edit } from './file'
+import { Glob } from './glob'
 
-// Agent-as-tool adapter
-import { agentToTool, shouldExposeAsTools } from './agent-tool-adapter'
-import { getAllAgents } from '../agents/registry'
+// Smart tool adapter
+import { smartToolToTool, shouldExposeAsTool } from './agent-tool-adapter'
+import { getAllSmartTools } from '../smart-tools/registry'
 
 type AnyToolDefinition = ToolDefinition<any>
 
@@ -20,31 +21,40 @@ type AnyToolDefinition = ToolDefinition<any>
  * Built-in tools (always available to main agent)
  */
 const builtInTools: AnyToolDefinition[] = [
+  // File operations
+  Read,
+  Write,
+  Edit,
+  // Shell execution
+  Bash,
+  // Search & explore
+  Glob,
+  flashGrep,
+  // Progress tracking
   addSubgoal,
   updateSubgoal,
   strikeSubgoal,
   clearSubgoals,
-  flashGrep,
   status,
-  multiToolUseParallel,
+  // Orchestration
+  batchTool,
 ]
 
 /**
  * Internal tools (used by agents, not exposed to main agent)
  */
 const internalTools: AnyToolDefinition[] = [
-  explore,
-  runTerminalCommand,  // Used by commander agent
+  // None currently - all tools are exposed to main agent
 ]
 
 /**
- * Get agents exposed as tools
+ * Get smart tools exposed as regular tools
  */
-function getAgentTools(): AnyToolDefinition[] {
-  const agents = getAllAgents()
-  return agents
-    .filter(shouldExposeAsTools)
-    .map(agentToTool)
+function getSmartToolsAsTools(): AnyToolDefinition[] {
+  const smartTools = getAllSmartTools()
+  return smartTools
+    .filter(shouldExposeAsTool)
+    .map(smartToolToTool)
 }
 
 // Runtime registry
@@ -57,14 +67,14 @@ let _availableTools: Record<string, ReturnType<typeof tool>> = {}
  */
 export async function initToolRegistry(): Promise<{ loaded: number; names: string[] }> {
   const userTools = await loadUserTools()
-  const agentTools = getAgentTools()
+  const smartToolsAsTools = getSmartToolsAsTools()
 
   // Build exposed tools (main agent can see these)
   const exposedByName = new Map<string, AnyToolDefinition>()
   for (const t of builtInTools) {
     exposedByName.set(t.name, t)
   }
-  for (const t of agentTools) {
+  for (const t of smartToolsAsTools) {
     exposedByName.set(t.name, t)
   }
   for (const t of userTools) {

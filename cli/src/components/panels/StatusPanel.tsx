@@ -1,7 +1,7 @@
 import { useTheme } from '../../hooks/use-theme'
 import { useChatStore } from '../../state/chat-store'
 import { getToolNames } from '../../tools/registry'
-import { getAgentNames } from '../../agents/registry'
+import { getSmartToolNames } from '../../smart-tools/registry'
 import { MODEL_CONTEXT_LIMITS, DEFAULT_CONTEXT_LIMIT } from '../../constants/app-constants'
 import { formatTokens, estimateTokens } from '../../utils/tokens'
 
@@ -83,7 +83,7 @@ export const StatusPanel = ({ model, modelId, mode, version, thinkingEnabled }: 
             <text style={{ fg: '#818cf8' }}>{FILLED} Messages: {formatTokens(messageTokens + toolCallTokens)}</text>
             <text style={{ fg: '#52525b' }}>{EMPTY} Free: {formatTokens(freeSpace)}</text>
             <text style={{ fg: '#71717a' }}>{RESERVED} Buffer: {formatTokens(reserveBuffer)}</text>
-            <text style={{ fg: theme.muted, marginTop: 1 }}>Tools: {getToolNames().length} | Agents: {getAgentNames().length}</text>
+            <text style={{ fg: theme.muted, marginTop: 1 }}>Tools: {getToolNames().length} | Smart Tools: {getSmartToolNames().length}</text>
           </box>
         </box>
       </box>

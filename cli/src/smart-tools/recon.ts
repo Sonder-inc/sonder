@@ -78,7 +78,7 @@ export interface ReconResult {
   next_scans: Array<{ tool: string; target: string; reason: string }>
 }
 
-export const reconAgent = defineGeneratorAgent<typeof reconParams, ReconResult>({
+export const recon = defineGeneratorAgent<typeof reconParams, ReconResult>({
   name: 'recon',
   id: 'recon',
   model: 'anthropic/claude-3.5-haiku',

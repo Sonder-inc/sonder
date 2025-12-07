@@ -4,7 +4,7 @@
  * Analyzes social engineering challenges (educational/CTF).
  */
 
-import { defineSimpleAgent } from './simple-agent'
+import { defineSimpleAgent } from './simple'
 
 export interface SEResult {
   scenario: string
@@ -15,7 +15,7 @@ export interface SEResult {
   defense: string[]
 }
 
-export const seAgent = defineSimpleAgent<SEResult>({
+export const se = defineSimpleAgent<SEResult>({
   name: 'se',
   description: 'Analyzes social engineering challenges (educational/CTF).',
   spawnerPrompt: 'Analyzes social engineering scenarios for CTF/educational purposes. Focuses on OSINT and defensive understanding.',

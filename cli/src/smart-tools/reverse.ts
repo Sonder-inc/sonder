@@ -4,7 +4,7 @@
  * Analyzes binaries, decompiled code, and RE challenges.
  */
 
-import { defineSimpleAgent } from './simple-agent'
+import { defineSimpleAgent } from './simple'
 
 export interface ReverseResult {
   analysis: {
@@ -18,7 +18,7 @@ export interface ReverseResult {
   tools: string[]
 }
 
-export const reverseAgent = defineSimpleAgent<ReverseResult>({
+export const reverse = defineSimpleAgent<ReverseResult>({
   name: 'reverse',
   description: 'Analyzes binaries and reverse engineering challenges.',
   spawnerPrompt: 'Analyzes binaries, disassembly, and decompiled code. Identifies vulnerabilities and suggests RE approaches.',

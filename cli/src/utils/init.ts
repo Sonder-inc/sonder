@@ -1,6 +1,6 @@
 import { initUserConfig } from './user-config'
 import { initToolRegistry } from '../tools/registry'
-import { initAgentRegistry } from '../agents/registry'
+import { initSmartToolRegistry } from '../smart-tools/registry'
 import { mcpManager } from '../services/mcp-manager'
 
 export interface InitResult {
@@ -27,8 +27,8 @@ export async function initSonder(): Promise<InitResult> {
   // 1. Ensure ~/.sonder directory structure exists
   const { created, path } = initUserConfig()
 
-  // 2. Load user agents into registry (must be before tools, agents are exposed as tools)
-  const agents = await initAgentRegistry()
+  // 2. Load user smart tools into registry (must be before tools, smart tools are exposed as tools)
+  const smartTools = await initSmartToolRegistry()
 
   // 3. Load user tools into registry (includes agent-as-tool adapters)
   const tools = await initToolRegistry()
@@ -40,7 +40,7 @@ export async function initSonder(): Promise<InitResult> {
     configPath: path,
     configCreated: created,
     tools,
-    agents,
+    agents: smartTools,
     mcps,
   }
 }

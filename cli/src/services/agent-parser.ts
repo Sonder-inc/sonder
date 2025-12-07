@@ -5,7 +5,11 @@
  * Handles error fallbacks and JSON parsing with consistent patterns.
  */
 
-import type { AgentContext, AgentResult } from '../agents/types'
+import type { SmartToolContext, SmartToolResult } from '../smart-tools/types'
+
+// Legacy type aliases
+type AgentContext = SmartToolContext
+type AgentResult<T = unknown> = SmartToolResult<T>
 import { executeAgentLLM } from './agent-executor'
 
 export interface ParseToolOutputOptions<T> {

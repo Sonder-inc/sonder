@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import type { ToolDefinition } from '../tools/types'
-import type { AgentDefinition } from '../agents/types'
+import type { SmartToolDefinition } from '../smart-tools/types'
 import { USER_DIRS, listUserFiles, type MCPServerConfig } from './user-config'
 
 /**
@@ -35,11 +35,11 @@ export async function loadUserTools(): Promise<ToolDefinition[]> {
 }
 
 /**
- * Dynamically load user-defined agents from ~/.sonder/agents/
+ * Dynamically load user-defined smart tools from ~/.sonder/smart-tools/
  */
-export async function loadUserAgents(): Promise<AgentDefinition[]> {
-  const agents: AgentDefinition[] = []
-  const files = listUserFiles('agents')
+export async function loadUserSmartTools(): Promise<SmartToolDefinition[]> {
+  const smartTools: SmartToolDefinition[] = []
+  const files = listUserFiles('agents') // User smart tools stored in ~/.sonder/agents/
 
   for (const file of files) {
     // Skip example files
@@ -48,19 +48,22 @@ export async function loadUserAgents(): Promise<AgentDefinition[]> {
     try {
       const module = await import(file.path)
 
-      // Find exported agent definitions
+      // Find exported smart tool definitions
       for (const [key, value] of Object.entries(module)) {
-        if (isAgentDefinition(value)) {
-          agents.push(value)
+        if (isSmartToolDefinition(value)) {
+          smartTools.push(value)
         }
       }
     } catch (err) {
-      console.error(`Failed to load user agent ${file.name}:`, err)
+      console.error(`Failed to load user smart tool ${file.name}:`, err)
     }
   }
 
-  return agents
+  return smartTools
 }
+
+/** @deprecated Use loadUserSmartTools */
+export const loadUserAgents = loadUserSmartTools
 
 /**
  * Load MCP server configurations from ~/.sonder/mcps/
@@ -107,9 +110,9 @@ function isToolDefinition(value: unknown): value is ToolDefinition {
 }
 
 /**
- * Type guard for agent definitions
+ * Type guard for smart tool definitions
  */
-function isAgentDefinition(value: unknown): value is AgentDefinition {
+function isSmartToolDefinition(value: unknown): value is SmartToolDefinition {
   if (!value || typeof value !== 'object') return false
   const obj = value as Record<string, unknown>
   return (
@@ -126,15 +129,15 @@ function isAgentDefinition(value: unknown): value is AgentDefinition {
  */
 export async function getUserExtensionsSummary(): Promise<{
   tools: string[]
-  agents: string[]
+  smartTools: string[]
   mcps: string[]
 }> {
-  const [tools, agents] = await Promise.all([loadUserTools(), loadUserAgents()])
+  const [tools, smartTools] = await Promise.all([loadUserTools(), loadUserSmartTools()])
   const mcps = loadUserMCPs()
 
   return {
     tools: tools.map(t => t.name),
-    agents: agents.map(a => a.name),
+    smartTools: smartTools.map(t => t.name),
     mcps: Array.from(mcps.keys()),
   }
 }

@@ -1,6 +1,10 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { generateText } from 'ai'
-import type { AgentContext, AgentResult } from '../agents/types'
+import type { SmartToolContext, SmartToolResult } from '../smart-tools/types'
+
+// Legacy type aliases
+type AgentContext = SmartToolContext
+type AgentResult = SmartToolResult
 
 /** Model used for subagents - fast and cheap */
 const SUBAGENT_MODEL = 'anthropic/claude-3.5-haiku'

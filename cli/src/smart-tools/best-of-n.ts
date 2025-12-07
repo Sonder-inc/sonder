@@ -36,7 +36,7 @@ Output ONLY valid JSON in this exact format:
 
 The "winner" field must be the index (0-based) of the best candidate.`
 
-export const bestOfNAgent = defineAgent({
+export const bestOfN = defineAgent({
   name: 'best_of_n',
   description: 'Spawn N instances of an agent in parallel and select the best result.',
 

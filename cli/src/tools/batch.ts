@@ -17,15 +17,15 @@ const multiToolUseParams = z.object({
   tool_uses: z.array(toolCallSchema).min(1).max(10).describe('Array of tool calls to execute in parallel'),
 })
 
-export const multiToolUseParallel = defineTool({
-  name: 'multi_tool_use_parallel',
+export const batchTool = defineTool({
+  name: 'batch',
   description: `Execute multiple tools in parallel. Use this when you need to run several independent operations concurrently for efficiency.
 
 Example:
 {
   "tool_uses": [
-    { "tool_name": "commander", "parameters": { "command": "nmap -sV target", "prompt": "list open ports" } },
-    { "tool_name": "explore", "parameters": { "path": "/var/www" } }
+    { "tool_name": "Bash", "parameters": { "command": "nmap -sV target" } },
+    { "tool_name": "Glob", "parameters": { "path": "/var/www" } }
   ]
 }`,
   parameters: multiToolUseParams,

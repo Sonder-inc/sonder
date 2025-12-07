@@ -4,7 +4,7 @@
  * Identifies ambiguities and generates clarifying questions.
  */
 
-import { defineSimpleAgent } from './simple-agent'
+import { defineSimpleAgent } from './simple'
 
 export interface QuestionOption {
   label: string
@@ -27,7 +27,7 @@ export interface InterrogatorResult {
   canProceed: boolean
 }
 
-export const interrogatorAgent = defineSimpleAgent<InterrogatorResult>({
+export const interrogator = defineSimpleAgent<InterrogatorResult>({
   name: 'interrogator',
   description: 'Identifies ambiguities and generates clarifying questions.',
   spawnerPrompt: 'Analyzes user requests to identify ambiguities and generate targeted clarifying questions. Use to refine unclear requirements.',

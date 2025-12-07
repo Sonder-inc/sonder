@@ -119,8 +119,8 @@ function countNodes(nodes: FileNode[]): { files: number; dirs: number } {
   return { files, dirs }
 }
 
-export const explore = defineTool({
-  name: 'explore',
+export const Glob = defineTool({
+  name: 'Glob',
   description: 'Explore directory structure. Returns a tree view of files and folders.',
   parameters: exploreParams,
 

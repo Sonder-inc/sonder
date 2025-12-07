@@ -4,7 +4,7 @@
  * Analyzes and helps solve cryptography challenges.
  */
 
-import { defineSimpleAgent } from './simple-agent'
+import { defineSimpleAgent } from './simple'
 
 export interface CryptoResult {
   analysis: {
@@ -17,7 +17,7 @@ export interface CryptoResult {
   decoded: string | null
 }
 
-export const cryptoAgent = defineSimpleAgent<CryptoResult>({
+export const crypto = defineSimpleAgent<CryptoResult>({
   name: 'crypto',
   description: 'Analyzes and helps solve cryptography challenges.',
   spawnerPrompt: 'Analyzes ciphertext to identify cipher types and suggest decryption approaches. Use for crypto CTF challenges.',

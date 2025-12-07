@@ -4,7 +4,7 @@
  * Provides progressive hints for CTF/HTB/THM challenges.
  */
 
-import { defineSimpleAgent } from './simple-agent'
+import { defineSimpleAgent } from './simple'
 
 export interface HinterResult {
   hint: string
@@ -13,7 +13,7 @@ export interface HinterResult {
   nextHint: string
 }
 
-export const hinterAgent = defineSimpleAgent<HinterResult>({
+export const hinter = defineSimpleAgent<HinterResult>({
   name: 'hinter',
   description: 'Provides progressive hints for CTF challenges without spoilers.',
   spawnerPrompt: 'Gives progressive hints for CTF/pentesting challenges without revealing answers. Use when stuck on a challenge.',

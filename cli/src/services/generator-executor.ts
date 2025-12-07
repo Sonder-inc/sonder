@@ -10,74 +10,74 @@ import { generateText } from 'ai'
 import { executeTool } from '../tools/registry'
 import { createAgentLogger } from '../utils/logger'
 import type {
-  GeneratorAgentDefinition,
-  AgentContext,
-  AgentResult,
-  AgentState,
-  AgentStepContext,
+  GeneratorSmartToolDefinition,
+  SmartToolContext,
+  SmartToolResult,
+  SmartToolState,
+  StepContext,
   StepResult,
-  AgentToolCall,
+  SmartToolCall,
   StepText,
   GenerateN,
-  AgentSubgoal,
-} from '../agents/types'
+  Subgoal,
+} from '../smart-tools/types'
 
 const DEFAULT_MODEL = 'anthropic/claude-3.5-haiku'
 
 export interface GeneratorExecutorConfig {
-  agent: GeneratorAgentDefinition
+  smartTool: GeneratorSmartToolDefinition
   params: Record<string, unknown>
   prompt?: string
-  context: AgentContext
+  context: SmartToolContext
 }
 
 /**
- * Execute a generator-based agent
+ * Execute a generator-based smart tool
  */
-export async function executeGeneratorAgent(
+export async function executeGeneratorSmartTool(
   config: GeneratorExecutorConfig
-): Promise<AgentResult> {
-  const { agent, params, prompt, context } = config
+): Promise<SmartToolResult> {
+  const { smartTool, params, prompt, context } = config
 
-  // Initialize agent state
-  const agentState: AgentState = {
+  // Initialize state
+  const state: SmartToolState = {
     messages: [],
     toolResults: [],
     subgoals: {},
   }
 
   // Add system prompt
-  if (agent.systemPrompt) {
-    agentState.messages.push({ role: 'system', content: agent.systemPrompt })
+  if (smartTool.systemPrompt) {
+    state.messages.push({ role: 'system', content: smartTool.systemPrompt })
   }
 
   // Add instructions prompt
-  if (agent.instructionsPrompt) {
-    agentState.messages.push({ role: 'system', content: agent.instructionsPrompt })
+  if (smartTool.instructionsPrompt) {
+    state.messages.push({ role: 'system', content: smartTool.instructionsPrompt })
   }
 
   // Add user context and prompt
   const userMessage = buildUserMessage(prompt, context)
   if (userMessage) {
-    agentState.messages.push({ role: 'user', content: userMessage })
+    state.messages.push({ role: 'user', content: userMessage })
   }
 
-  // Create agent-specific logger
-  const logger = createAgentLogger(agent.name)
+  // Create smart tool-specific logger
+  const logger = createAgentLogger(smartTool.name)
 
   // Create step context
-  const stepContext: AgentStepContext = {
+  const stepContext: StepContext = {
     params,
     prompt,
-    agentState,
+    state,
     logger,
   }
 
   // Create and run generator
-  const generator = agent.handleSteps(stepContext)
+  const generator = smartTool.handleSteps(stepContext)
 
   let stepResult: StepResult = {
-    agentState,
+    state,
     toolResult: undefined,
     stepsComplete: false,
   }
@@ -89,11 +89,11 @@ export async function executeGeneratorAgent(
 
     if (yieldValue === 'STEP') {
       // Run single LLM inference step
-      const llmResult = await runLLMStep(agent, agentState, context)
-      agentState.messages.push({ role: 'assistant', content: llmResult })
+      const llmResult = await runLLMStep(smartTool, state, context)
+      state.messages.push({ role: 'assistant', content: llmResult })
 
       stepResult = {
-        agentState,
+        state,
         toolResult: llmResult,
         stepsComplete: false,
       }
@@ -104,8 +104,8 @@ export async function executeGeneratorAgent(
       const maxLoops = 10 // Safety limit
 
       while (continueLoop && loopCount < maxLoops) {
-        const llmResult = await runLLMStep(agent, agentState, context)
-        agentState.messages.push({ role: 'assistant', content: llmResult })
+        const llmResult = await runLLMStep(smartTool, state, context)
+        state.messages.push({ role: 'assistant', content: llmResult })
         loopCount++
 
         // Simple heuristic: if response is short or doesn't ask for tools, stop
@@ -115,16 +115,16 @@ export async function executeGeneratorAgent(
       }
 
       stepResult = {
-        agentState,
+        state,
         toolResult: undefined,
         stepsComplete: true,
       }
     } else if (isStepText(yieldValue)) {
       // StepText: inject text directly into assistant messages
-      agentState.messages.push({ role: 'assistant', content: yieldValue.text })
+      state.messages.push({ role: 'assistant', content: yieldValue.text })
 
       stepResult = {
-        agentState,
+        state,
         toolResult: undefined,
         stepsComplete: false,
       }
@@ -132,42 +132,42 @@ export async function executeGeneratorAgent(
       // GenerateN: generate N parallel LLM responses for multi-arm exploration
       const n = yieldValue.n
       const responses = await Promise.all(
-        Array.from({ length: n }, () => runLLMStep(agent, agentState, context))
+        Array.from({ length: n }, () => runLLMStep(smartTool, state, context))
       )
 
       stepResult = {
-        agentState,
+        state,
         toolResult: undefined,
         stepsComplete: false,
         nResponses: responses,
       }
     } else if (isToolCall(yieldValue)) {
       // Execute tool call
-      const toolCall = yieldValue as AgentToolCall
+      const toolCall = yieldValue as SmartToolCall
       const excludeFromHistory = toolCall.includeToolCall === false
 
-      // Handle special agent control tools
+      // Handle special control tools
       if (toolCall.toolName === 'set_output') {
-        // set_output: explicitly set agent output
+        // set_output: explicitly set output
         const input = toolCall.input as { data?: unknown }
-        agentState.output = (input.data ?? input) as Record<string, unknown>
+        state.output = (input.data ?? input) as Record<string, unknown>
 
         const result = {
           success: true,
           summary: 'Output set',
           fullResult: 'Output has been set',
         }
-        agentState.toolResults.push(result)
+        state.toolResults.push(result)
 
         stepResult = {
-          agentState,
+          state,
           toolResult: result,
           stepsComplete: false,
         }
       } else if (toolCall.toolName === 'add_message') {
         // add_message: add a message to the conversation
         const input = toolCall.input as { role: 'user' | 'assistant'; content: string }
-        agentState.messages.push({
+        state.messages.push({
           role: input.role,
           content: input.content,
         })
@@ -177,10 +177,10 @@ export async function executeGeneratorAgent(
           summary: 'Message added',
           fullResult: `Added ${input.role} message`,
         }
-        agentState.toolResults.push(result)
+        state.toolResults.push(result)
 
         stepResult = {
-          agentState,
+          state,
           toolResult: result,
           stepsComplete: false,
         }
@@ -194,7 +194,7 @@ export async function executeGeneratorAgent(
           log?: string
         }
 
-        const subgoal: AgentSubgoal = {
+        const subgoal: Subgoal = {
           id: input.id,
           objective: input.objective,
           status: input.status || 'pending',
@@ -202,17 +202,17 @@ export async function executeGeneratorAgent(
           logs: input.log ? [input.log] : [],
         }
 
-        agentState.subgoals[input.id] = subgoal
+        state.subgoals[input.id] = subgoal
 
         const result = {
           success: true,
           summary: `Subgoal added: ${input.objective.slice(0, 30)}`,
           fullResult: `Added subgoal "${input.id}": ${input.objective}`,
         }
-        agentState.toolResults.push(result)
+        state.toolResults.push(result)
 
         stepResult = {
-          agentState,
+          state,
           toolResult: result,
           stepsComplete: false,
         }
@@ -225,10 +225,10 @@ export async function executeGeneratorAgent(
           log?: string
         }
 
-        const existing = agentState.subgoals[input.id]
+        const existing = state.subgoals[input.id]
         if (!existing) {
           // Create if doesn't exist
-          agentState.subgoals[input.id] = {
+          state.subgoals[input.id] = {
             id: input.id,
             objective: input.id, // Use id as objective if not set
             status: input.status || 'pending',
@@ -246,42 +246,42 @@ export async function executeGeneratorAgent(
           summary: `Subgoal updated: ${input.id}`,
           fullResult: `Updated subgoal "${input.id}"${input.status ? ` status=${input.status}` : ''}${input.log ? ` +log` : ''}`,
         }
-        agentState.toolResults.push(result)
+        state.toolResults.push(result)
 
         stepResult = {
-          agentState,
+          state,
           toolResult: result,
           stepsComplete: false,
         }
       } else {
         // Check tool access control for regular tools
-        if (agent.toolNames && !agent.toolNames.includes(toolCall.toolName)) {
+        if (smartTool.toolNames && !smartTool.toolNames.includes(toolCall.toolName)) {
           const errorResult = {
             success: false,
             summary: `Access denied: ${toolCall.toolName}`,
-            fullResult: `Agent "${agent.name}" is not allowed to use tool "${toolCall.toolName}"`,
+            fullResult: `Smart tool "${smartTool.name}" is not allowed to use tool "${toolCall.toolName}"`,
           }
-          agentState.toolResults.push(errorResult)
+          state.toolResults.push(errorResult)
 
           stepResult = {
-            agentState,
+            state,
             toolResult: errorResult,
             stepsComplete: false,
           }
         } else {
           const result = await executeTool(toolCall.toolName, toolCall.input)
-          agentState.toolResults.push(result)
+          state.toolResults.push(result)
 
           // Only add to message history if not excluded
           if (!excludeFromHistory) {
-            agentState.messages.push({
+            state.messages.push({
               role: 'user',
               content: `Tool "${toolCall.toolName}" result:\n${result.fullResult}`,
             })
           }
 
           stepResult = {
-            agentState,
+            state,
             toolResult: result,
             stepsComplete: false,
           }
@@ -293,13 +293,13 @@ export async function executeGeneratorAgent(
   }
 
   // Extract final result based on outputMode
-  return extractResult(agent, agentState)
+  return extractResult(smartTool, state)
 }
 
 /**
  * Check if a yield value is a tool call
  */
-function isToolCall(value: unknown): value is AgentToolCall {
+function isToolCall(value: unknown): value is SmartToolCall {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -335,7 +335,7 @@ function isGenerateN(value: unknown): value is GenerateN {
 /**
  * Build user message from prompt and context
  */
-function buildUserMessage(prompt: string | undefined, context: AgentContext): string {
+function buildUserMessage(prompt: string | undefined, context: SmartToolContext): string {
   const parts: string[] = []
 
   if (context.conversationContext) {
@@ -362,9 +362,9 @@ function buildUserMessage(prompt: string | undefined, context: AgentContext): st
  * Run single LLM inference step
  */
 async function runLLMStep(
-  agent: GeneratorAgentDefinition,
-  agentState: AgentState,
-  context: AgentContext
+  smartTool: GeneratorSmartToolDefinition,
+  state: SmartToolState,
+  context: SmartToolContext
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
@@ -376,16 +376,16 @@ async function runLLMStep(
     apiKey,
   })
 
-  const model = agent.model || DEFAULT_MODEL
+  const model = smartTool.model || DEFAULT_MODEL
 
   // Build messages for the API call
-  const systemMessages = agentState.messages.filter(m => m.role === 'system')
-  const conversationMessages = agentState.messages.filter(m => m.role !== 'system')
+  const systemMessages = state.messages.filter(m => m.role === 'system')
+  const conversationMessages = state.messages.filter(m => m.role !== 'system')
 
   // Build system prompt with optional stepPrompt
   let systemPrompt = systemMessages.map(m => m.content).join('\n\n')
-  if (agent.stepPrompt) {
-    systemPrompt += `\n\n<system_reminder>${agent.stepPrompt}</system_reminder>`
+  if (smartTool.stepPrompt) {
+    systemPrompt += `\n\n<system_reminder>${smartTool.stepPrompt}</system_reminder>`
   }
 
   const result = await generateText({
@@ -401,23 +401,23 @@ async function runLLMStep(
 }
 
 /**
- * Extract final result based on agent's outputMode
+ * Extract final result based on outputMode
  */
 function extractResult(
-  agent: GeneratorAgentDefinition,
-  agentState: AgentState
-): AgentResult {
+  smartTool: GeneratorSmartToolDefinition,
+  state: SmartToolState
+): SmartToolResult {
   // If output was explicitly set via set_output tool, use that
-  if (agentState.output !== undefined) {
+  if (state.output !== undefined) {
     return {
       success: true,
       summary: 'Output set',
-      data: agentState.output,
+      data: state.output,
     }
   }
 
-  const outputMode = agent.outputMode || 'last_message'
-  const assistantMessages = agentState.messages.filter(m => m.role === 'assistant')
+  const outputMode = smartTool.outputMode || 'last_message'
+  const assistantMessages = state.messages.filter(m => m.role === 'assistant')
 
   switch (outputMode) {
     case 'last_message': {
@@ -459,7 +459,10 @@ function extractResult(
       return {
         success: true,
         summary: 'Completed',
-        data: agentState.toolResults[agentState.toolResults.length - 1],
+        data: state.toolResults[state.toolResults.length - 1],
       }
   }
 }
+
+/** @deprecated Use executeGeneratorSmartTool */
+export const executeGeneratorAgent = executeGeneratorSmartTool

@@ -140,7 +140,7 @@ export interface VglobResult {
   recommended_workflow: string[]
 }
 
-export const vglobAgent = defineGeneratorAgent<typeof vglobParams, VglobResult>({
+export const vglob = defineGeneratorAgent<typeof vglobParams, VglobResult>({
   name: 'vglob',
   id: 'vglob',
   model: 'anthropic/claude-3.5-haiku',
