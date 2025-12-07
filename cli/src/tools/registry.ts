@@ -2,70 +2,85 @@ import { tool } from 'ai'
 import type { ToolResult, ToolDefinition } from './types'
 import { loadUserTools } from '../utils/user-loader'
 
-// Import all built-in tools here
-import { planWrite, todoStrike, taskComplete } from './plan-write'
+// Import existing built-in tools
 import { addSubgoal, updateSubgoal, strikeSubgoal, clearSubgoals } from './subgoal'
 import { flashGrep } from './flash-grep'
 import { explore } from './explore'
-import { spawnAgent } from './spawn-agent'
 import { status } from './status'
 import { runTerminalCommand } from './run-terminal-command'
-import { runReconScans } from './run-recon-scans'
-import { runVulnSearch, runExploitMatch } from './run-vuln-search'
+import { multiToolUseParallel } from './multi-tool-use'
 
-// Using loose array type to avoid complex generic variance issues
+// Agent-as-tool adapter
+import { agentToTool, shouldExposeAsTools } from './agent-tool-adapter'
+import { getAllAgents } from '../agents/registry'
+
 type AnyToolDefinition = ToolDefinition<any>
 
 /**
- * Built-in tools (always available)
+ * Built-in tools (always available to main agent)
  */
 const builtInTools: AnyToolDefinition[] = [
-  // Subgoal tracking (replaces plan)
   addSubgoal,
   updateSubgoal,
   strikeSubgoal,
   clearSubgoals,
-  // Legacy plan tools (deprecated, kept for compatibility)
-  planWrite,
-  todoStrike,
-  taskComplete,
-  // Core tools
   flashGrep,
-  explore,
-  spawnAgent,
   status,
-  runTerminalCommand,
-  runReconScans,
-  runVulnSearch,
-  runExploitMatch,
+  multiToolUseParallel,
 ]
 
-// Runtime registry (populated on init)
-let allTools: AnyToolDefinition[] = [...builtInTools]
-let toolMap = new Map(allTools.map(t => [t.name, t] as const))
+/**
+ * Internal tools (used by agents, not exposed to main agent)
+ */
+const internalTools: AnyToolDefinition[] = [
+  explore,
+  runTerminalCommand,  // Used by commander agent
+]
+
+/**
+ * Get agents exposed as tools
+ */
+function getAgentTools(): AnyToolDefinition[] {
+  const agents = getAllAgents()
+  return agents
+    .filter(shouldExposeAsTools)
+    .map(agentToTool)
+}
+
+// Runtime registry
+let exposedTools: AnyToolDefinition[] = [...builtInTools]  // Tools exposed to main agent
+let toolMap = new Map<string, AnyToolDefinition>()          // All tools (for execution)
 let _availableTools: Record<string, ReturnType<typeof tool>> = {}
 
 /**
- * Initialize tool registry, loading user tools from ~/.sonder/tools/
+ * Initialize tool registry
  */
 export async function initToolRegistry(): Promise<{ loaded: number; names: string[] }> {
   const userTools = await loadUserTools()
+  const agentTools = getAgentTools()
 
-  // Merge built-in and user tools (user tools can override built-in)
-  const toolsByName = new Map<string, AnyToolDefinition>()
+  // Build exposed tools (main agent can see these)
+  const exposedByName = new Map<string, AnyToolDefinition>()
   for (const t of builtInTools) {
-    toolsByName.set(t.name, t)
+    exposedByName.set(t.name, t)
+  }
+  for (const t of agentTools) {
+    exposedByName.set(t.name, t)
   }
   for (const t of userTools) {
-    toolsByName.set(t.name, t)
+    exposedByName.set(t.name, t)
+  }
+  exposedTools = Array.from(exposedByName.values())
+
+  // Build full tool map (includes internal tools for agent use)
+  toolMap = new Map(exposedByName)
+  for (const t of internalTools) {
+    toolMap.set(t.name, t)
   }
 
-  allTools = Array.from(toolsByName.values())
-  toolMap = new Map(allTools.map(t => [t.name, t] as const))
-
-  // Rebuild available tools for AI SDK
+  // Build AI SDK tools (only exposed tools)
   _availableTools = Object.fromEntries(
-    allTools.map(t => [
+    exposedTools.map(t => [
       t.name,
       tool({
         description: t.description,
@@ -81,14 +96,12 @@ export async function initToolRegistry(): Promise<{ loaded: number; names: strin
 }
 
 /**
- * Available tools in Vercel AI SDK format
- * Used by openrouter.ts for streamText()
+ * Get available tools in AI SDK format (only exposed tools)
  */
 export function getAvailableTools(): Record<string, ReturnType<typeof tool>> {
-  // Return cached or build from current allTools
   if (Object.keys(_availableTools).length === 0) {
     _availableTools = Object.fromEntries(
-      allTools.map(t => [
+      exposedTools.map(t => [
         t.name,
         tool({
           description: t.description,
@@ -100,11 +113,8 @@ export function getAvailableTools(): Record<string, ReturnType<typeof tool>> {
   return _availableTools
 }
 
-// Legacy export for backwards compatibility
-export const availableTools = getAvailableTools()
-
 /**
- * Execute a tool by name with automatic parameter validation
+ * Execute a tool by name (can execute internal tools too)
  */
 export async function executeTool(
   name: string,
@@ -120,7 +130,6 @@ export async function executeTool(
     }
   }
 
-  // Validate parameters using Zod schema
   const parsed = t.parameters.safeParse(params)
   if (!parsed.success) {
     return {
@@ -133,23 +142,28 @@ export async function executeTool(
   return t.execute(parsed.data as never)
 }
 
-/**
- * Get all available tool names
- */
 export function getToolNames(): string[] {
-  return allTools.map(t => t.name)
+  return exposedTools.map(t => t.name)
 }
 
-/**
- * Get tool descriptions for LLM context
- */
 export function getToolDescriptions(): Record<string, string> {
-  return Object.fromEntries(allTools.map(t => [t.name, t.description]))
+  return Object.fromEntries(exposedTools.map(t => [t.name, t.description]))
 }
 
-/**
- * Check if a tool is user-defined
- */
 export function isUserTool(name: string): boolean {
   return !builtInTools.some(t => t.name === name) && toolMap.has(name)
+}
+
+// Singleton-style registry object for compatibility
+export const toolRegistry = {
+  init: initToolRegistry,
+  getAvailableTools,
+  execute: executeTool,
+  getToolNames,
+  getToolDescriptions,
+  get: (name: string) => toolMap.get(name),
+  isUserTool,
+  // MCP stubs (MCP tools not supported in simplified registry)
+  registerMCPTools: (_serverName: string, _tools: unknown[]) => {},
+  unregisterMCPTools: (_serverName: string) => {},
 }

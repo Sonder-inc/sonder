@@ -1,14 +1,22 @@
-import type { AgentContext, AgentResult, AgentDefinition, AnyAgentDefinition as AgentUnion } from './types'
+/**
+ * Agent Registry
+ *
+ * Single source of truth for all agents: built-in and user-defined.
+ * Extends BaseRegistry with agent-specific execution routing.
+ */
+
+import type { AgentContext, AgentResult, AnyAgentDefinition } from './types'
 import { isGeneratorAgent } from './types'
 import { loadUserAgents } from '../utils/user-loader'
 import { executeGeneratorAgent } from '../services/generator-executor'
+import { BaseRegistry } from '../registries/base-registry'
 
 // Import all built-in agents
-import { councilAgent } from './council-agent'
 import { bestOfNAgent } from './best-of-n-agent'
-import { codeReviewerAgent } from './code-reviewer-agent'
+import { reviewerAgent } from './reviewer-agent'
 import { commanderAgent } from './commander-agent'
 import { editorAgent } from './editor-agent'
+import { exploreAgent } from './explore-agent'
 import { searchFetchAgent } from './researcher-web-agent'
 import { compactAgent } from './context-pruner-agent'
 import { interrogatorAgent } from './interrogator-agent'
@@ -19,21 +27,18 @@ import { reverseAgent } from './reverse-agent'
 import { seAgent } from './se-agent'
 import { vgrepAgent } from './vgrep-agent'
 import { vglobAgent } from './vglob-agent'
-import { mcpAgent } from './mcp-agent'
 
-// Using loose type to avoid complex generic variance issues
-// Supports both async execute() and generator handleSteps() agents
-type AnyAgentDefinition = AgentUnion<any, any>
+type AnyAgent = AnyAgentDefinition<any, any>
 
 /**
- * Built-in agents (always available)
+ * Built-in agents
  */
-const builtInAgents: AnyAgentDefinition[] = [
-  councilAgent,
+const builtInAgents: AnyAgent[] = [
   bestOfNAgent,
-  codeReviewerAgent,
+  reviewerAgent,
   commanderAgent,
   editorAgent,
+  exploreAgent,
   searchFetchAgent,
   compactAgent,
   interrogatorAgent,
@@ -44,146 +49,199 @@ const builtInAgents: AnyAgentDefinition[] = [
   seAgent,
   vgrepAgent,
   vglobAgent,
-  mcpAgent,
 ]
 
-// Runtime registry (populated on init)
-let allAgents: AnyAgentDefinition[] = [...builtInAgents]
-let agentMap = new Map(allAgents.map(a => [a.name, a] as const))
-
 /**
- * Initialize agent registry, loading user agents from ~/.sonder/agents/
+ * Agent Registry with execution routing
  */
-export async function initAgentRegistry(): Promise<{ loaded: number; names: string[] }> {
-  const userAgents = await loadUserAgents()
+class AgentRegistry extends BaseRegistry<AnyAgent> {
+  private builtInNames: Set<string>
 
-  // Merge built-in and user agents (user agents can override built-in)
-  const agentsByName = new Map<string, AnyAgentDefinition>()
-  for (const a of builtInAgents) {
-    agentsByName.set(a.name, a)
-  }
-  for (const a of userAgents) {
-    agentsByName.set(a.name, a)
+  constructor() {
+    super()
+    this.builtInNames = new Set(builtInAgents.map((a) => a.name))
   }
 
-  allAgents = Array.from(agentsByName.values())
-  agentMap = new Map(allAgents.map(a => [a.name, a] as const))
+  /**
+   * Initialize with built-in and user agents
+   */
+  async init(): Promise<{ loaded: number; names: string[] }> {
+    if (this.initialized) {
+      return { loaded: 0, names: [] }
+    }
 
-  return {
-    loaded: userAgents.length,
-    names: userAgents.map(a => a.name),
+    // Register built-in agents
+    for (const agent of builtInAgents) {
+      this.registerBuiltIn(agent)
+    }
+
+    // Load and register user agents (can override built-in)
+    const userAgents = await loadUserAgents()
+    for (const agent of userAgents) {
+      this.registerUser(agent)
+    }
+
+    this.initialized = true
+
+    return {
+      loaded: userAgents.length,
+      names: userAgents.map((a) => a.name),
+    }
+  }
+
+  /**
+   * Execute an agent by name
+   * Automatically routes to generator executor for handleSteps agents
+   */
+  async execute(
+    name: string,
+    params: Record<string, unknown>,
+    context: AgentContext
+  ): Promise<AgentResult> {
+    const agent = this.get(name)
+
+    if (!agent) {
+      return {
+        success: false,
+        summary: `Unknown agent: ${name}`,
+      }
+    }
+
+    // Validate parameters
+    const parsed = agent.parameters.safeParse(params)
+    if (!parsed.success) {
+      return {
+        success: false,
+        summary: 'Invalid parameters',
+      }
+    }
+
+    // Route to appropriate executor
+    if (isGeneratorAgent(agent)) {
+      return executeGeneratorAgent({
+        agent,
+        params: parsed.data as Record<string, unknown>,
+        prompt: (parsed.data as any)?.prompt,
+        context,
+      })
+    }
+
+    // Legacy async execute
+    if ('execute' in agent && typeof agent.execute === 'function') {
+      return agent.execute(parsed.data as never, context)
+    }
+
+    return {
+      success: false,
+      summary: `Agent ${name} has no executor`,
+    }
+  }
+
+  /**
+   * Get rich agent info including parameter schemas
+   */
+  getSchemas(): Record<string, { description: string; spawnerPrompt?: string; params: Record<string, string> }> {
+    const result: Record<string, { description: string; spawnerPrompt?: string; params: Record<string, string> }> = {}
+
+    for (const agent of this.getAll()) {
+      if (agent.name === 'council') continue
+
+      const params: Record<string, string> = {}
+      const shape = (agent.parameters as any)?._def?.shape?.()
+
+      if (shape) {
+        for (const [key, value] of Object.entries(shape)) {
+          const desc = (value as any)?._def?.description || (value as any)?.description
+          const typeName = (value as any)?._def?.typeName || 'unknown'
+          params[key] = desc || typeName
+        }
+      }
+
+      const spawnerPrompt = isGeneratorAgent(agent) ? agent.spawnerPrompt : undefined
+
+      result[agent.name] = {
+        description: spawnerPrompt || agent.description,
+        spawnerPrompt,
+        params,
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * Check if an agent is user-defined (not a built-in override)
+   */
+  isUserAgent(name: string): boolean {
+    return !this.builtInNames.has(name) && this.has(name)
+  }
+
+  // Aliases for backward compatibility
+  getAgent(name: string): AnyAgent | undefined {
+    return this.get(name)
+  }
+
+  getAgentNames(): string[] {
+    return this.getNames()
+  }
+
+  getAllAgents(): AnyAgent[] {
+    return this.getAll()
+  }
+
+  getAgentDescriptions(): Record<string, string> {
+    return this.getDescriptions()
+  }
+
+  getAgentSchemas() {
+    return this.getSchemas()
   }
 }
+
+// Singleton instance
+const agentRegistry = new AgentRegistry()
+
+// =============================================================================
+// Exports
+// =============================================================================
 
 export type AgentName = string
 
-/**
- * Get agent definition by name
- */
-export function getAgent(name: string): AnyAgentDefinition | undefined {
-  return agentMap.get(name)
+export async function initAgentRegistry(): Promise<{ loaded: number; names: string[] }> {
+  return agentRegistry.init()
 }
 
-/**
- * Execute an agent by name
- * Automatically routes to generator executor for handleSteps agents
- */
+export function getAgent(name: string): AnyAgent | undefined {
+  return agentRegistry.getAgent(name)
+}
+
 export async function executeAgent(
   name: string,
   params: Record<string, unknown>,
   context: AgentContext
 ): Promise<AgentResult> {
-  const agent = agentMap.get(name)
-
-  if (!agent) {
-    return {
-      success: false,
-      summary: `Unknown agent: ${name}`,
-    }
-  }
-
-  // Validate parameters
-  const parsed = agent.parameters.safeParse(params)
-  if (!parsed.success) {
-    return {
-      success: false,
-      summary: 'Invalid parameters',
-    }
-  }
-
-  // Route to appropriate executor
-  if (isGeneratorAgent(agent)) {
-    return executeGeneratorAgent({
-      agent,
-      params: parsed.data as Record<string, unknown>,
-      prompt: (parsed.data as any)?.prompt,
-      context,
-    })
-  }
-
-  // Legacy async execute - must be an AgentDefinition with execute
-  if ('execute' in agent && typeof agent.execute === 'function') {
-    return agent.execute(parsed.data as never, context)
-  }
-
-  return {
-    success: false,
-    summary: `Agent ${name} has no executor`,
-  }
+  return agentRegistry.execute(name, params, context)
 }
 
-/**
- * Get all agent names
- */
 export function getAgentNames(): string[] {
-  return allAgents.map(a => a.name)
+  return agentRegistry.getAgentNames()
 }
 
-/**
- * Get agent descriptions for main agent to know what's available
- */
+export function getAllAgents(): AnyAgent[] {
+  return agentRegistry.getAllAgents()
+}
+
 export function getAgentDescriptions(): Record<string, string> {
-  return Object.fromEntries(allAgents.map(a => [a.name, a.description]))
+  return agentRegistry.getAgentDescriptions()
 }
 
-/**
- * Get rich agent info including parameter schemas for internal negotiation
- * For generator agents, uses spawnerPrompt and inputSchema if available
- */
-export function getAgentSchemas(): Record<string, { description: string; spawnerPrompt?: string; params: Record<string, string> }> {
-  const result: Record<string, { description: string; spawnerPrompt?: string; params: Record<string, string> }> = {}
-
-  for (const agent of allAgents) {
-    if (agent.name === 'council') continue // Skip internal agent
-
-    // Extract param descriptions from zod schema
-    const params: Record<string, string> = {}
-    const shape = (agent.parameters as any)?._def?.shape?.()
-
-    if (shape) {
-      for (const [key, value] of Object.entries(shape)) {
-        const desc = (value as any)?._def?.description || (value as any)?.description
-        const typeName = (value as any)?._def?.typeName || 'unknown'
-        params[key] = desc || typeName
-      }
-    }
-
-    // For generator agents, include spawnerPrompt
-    const spawnerPrompt = isGeneratorAgent(agent) ? agent.spawnerPrompt : undefined
-
-    result[agent.name] = {
-      description: spawnerPrompt || agent.description,
-      spawnerPrompt,
-      params,
-    }
-  }
-
-  return result
+export function getAgentSchemas() {
+  return agentRegistry.getAgentSchemas()
 }
 
-/**
- * Check if an agent is user-defined
- */
 export function isUserAgent(name: string): boolean {
-  return !builtInAgents.some(a => a.name === name) && agentMap.has(name)
+  return agentRegistry.isUserAgent(name)
 }
+
+// Export the registry instance for direct access if needed
+export { agentRegistry }
