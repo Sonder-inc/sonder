@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TextAttributes } from '@opentui/core'
 import { useTheme } from '../hooks/use-theme'
+import { Clickable } from './clickable'
 
 export interface ToolInvocationProps {
   toolName: string
@@ -26,11 +27,6 @@ const formatParams = (params: Record<string, unknown>): string => {
     .join(', ')
 }
 
-const formatTokenCount = (charCount: number): string => {
-  const tokens = Math.round(charCount / 4) // Rough estimate
-  return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k tok` : `${tokens} tok`
-}
-
 export const ToolInvocation = ({
   toolName,
   params,
@@ -42,6 +38,7 @@ export const ToolInvocation = ({
   summary,
   expanded,
   fullResult,
+  onToggleExpand,
 }: ToolInvocationProps) => {
   const theme = useTheme()
   const [blinkOn, setBlinkOn] = useState(true)
@@ -63,9 +60,6 @@ export const ToolInvocation = ({
     ? inputDisplay.slice(0, maxLen) + '...'
     : inputDisplay
 
-  // Token count for expand hint
-  const tokenHint = fullResult ? ` ${formatTokenCount(fullResult.length)}` : ''
-
   // Use displayName if provided, otherwise use toolName
   const nameToShow = displayName ?? toolName
 
@@ -84,8 +78,8 @@ export const ToolInvocation = ({
     }
   }
 
-  // Summary color: grey if no expandable content, otherwise normal
-  const summaryColor = fullResult ? theme.foreground : theme.muted
+  // Summary color: always light grey
+  const summaryColor = theme.muted
 
   // Status-only display: ● message
   if (isStatusOnly) {
@@ -117,16 +111,18 @@ export const ToolInvocation = ({
         </text>
       )}
 
-      {/* Result summary line */}
+      {/* Result summary line - clickable to expand */}
       {status !== 'executing' && summary && (
-        <text style={{ marginLeft: 2, wrapMode: 'word' }}>
-          <span fg={summaryColor}>⎿ {summary}</span>
-          {fullResult && (
-            <span fg={theme.muted} attributes={TextAttributes.DIM}>
-              {' '}(⌃o{tokenHint})
-            </span>
-          )}
-        </text>
+        <Clickable onClick={fullResult && onToggleExpand ? onToggleExpand : undefined}>
+          <text style={{ marginLeft: 2, wrapMode: 'word' }}>
+            <span fg={summaryColor}>⎿ {summary}</span>
+            {fullResult && (
+              <span fg={theme.muted} attributes={TextAttributes.DIM}>
+                {' '}(click to {expanded ? 'hide' : 'show'})
+              </span>
+            )}
+          </text>
+        </Clickable>
       )}
 
       {/* Expanded result */}

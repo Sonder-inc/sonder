@@ -244,6 +244,7 @@ class MCPManager {
 
   /**
    * Discover available tools from an MCP server
+   * Automatically registers tools with the unified tool registry
    */
   async discoverTools(name: string): Promise<MCPToolDefinition[]> {
     const conn = this.connections.get(name)
@@ -253,6 +254,11 @@ class MCPManager {
 
     const result = (await this.request(name, 'tools/list', {})) as MCPToolsListResult
     conn.tools = result.tools || []
+
+    // Register tools with unified registry
+    const { toolRegistry } = await import('../tools/registry')
+    toolRegistry.registerMCPTools(name, conn.tools)
+
     return conn.tools
   }
 
@@ -287,12 +293,17 @@ class MCPManager {
 
   /**
    * Stop an MCP server
+   * Unregisters tools from the unified registry
    */
   async stop(name: string): Promise<boolean> {
     const conn = this.connections.get(name)
     if (!conn || !conn.process) {
       return false
     }
+
+    // Unregister tools from unified registry
+    const { toolRegistry } = await import('../tools/registry')
+    toolRegistry.unregisterMCPTools(name)
 
     this.rejectAllPending(conn, 'MCP server stopped')
     conn.process.kill()

@@ -3,6 +3,8 @@
  * Runs chat completions with tool calling without TUI
  */
 
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { streamChat, type Message, type ToolCallRequest } from '../services/openrouter'
 import { executeTool } from '../tools/registry'
 import { MODEL_IDS } from '../constants/app-constants'
@@ -28,10 +30,29 @@ export interface HeadlessResult {
   }
 }
 
-const HEADLESS_SYSTEM_PROMPT = `You are sonder, an AI assistant running in headless/CI mode.
+const DEFAULT_SYSTEM_PROMPT = `You are sonder, an AI assistant running in headless/CI mode.
 You have access to tools for file operations, code search, and shell commands.
-Execute tasks efficiently and provide clear, structured output.
-When you need to create a PR, use the commander tool to run gh CLI commands.`
+Execute tasks efficiently and provide clear, structured output.`
+
+/**
+ * Load system prompt from sonder.md or use default
+ */
+function loadSystemPrompt(): string {
+  // Look for sonder.md in project root (3 levels up from headless/)
+  const projectRoot = join(__dirname, '..', '..', '..', '..')
+  const systemPromptPath = join(projectRoot, 'sonder.md')
+
+  if (existsSync(systemPromptPath)) {
+    try {
+      const content = readFileSync(systemPromptPath, 'utf-8').trim()
+      if (content) return content
+    } catch {
+      // Fall through to default
+    }
+  }
+
+  return DEFAULT_SYSTEM_PROMPT
+}
 
 /**
  * Run sonder in headless mode
@@ -50,8 +71,9 @@ export async function runHeadless(config: HeadlessConfig): Promise<HeadlessResul
 
   try {
     // Build initial messages
+    const systemPrompt = loadSystemPrompt()
     const messages: Message[] = [
-      { role: 'system', content: HEADLESS_SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: config.prompt },
     ]
 

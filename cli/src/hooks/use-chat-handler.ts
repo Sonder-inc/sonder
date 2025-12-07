@@ -68,6 +68,8 @@ export function useChatHandler({
 
   const handleSendMessage = useCallback(
     async (content: string) => {
+      console.error('[DEBUG 1] handleSendMessage called:', content.slice(0, 50))
+
       // Clear any existing subgoals from previous message
       useSubgoalStore.getState().clear()
 
@@ -136,6 +138,7 @@ export function useChatHandler({
             chatMessages,
             {
               onChunk: (chunk, tokens) => {
+                console.error('[DEBUG 4] onChunk:', chunk.length, 'chars')
                 appendToStreamingMessage(chunk)
                 updateTokenCount(tokens)
               },

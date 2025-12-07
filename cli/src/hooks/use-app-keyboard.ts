@@ -7,8 +7,12 @@ import type { ToolCall, ChatMessage } from '../types/chat'
 import type { ContextFocusPhase } from '../components/panels/ContextPanel'
 import { useWorktreeNavigation } from './use-worktree-navigation'
 import { useThreadStore } from '../state/thread-store'
+import { useSchoolStore } from '../state/school-store'
+import { platformManager } from '../services/platform'
 import { saveMessage } from '../services/message-persistence'
 import { copyToClipboard } from '../utils/clipboard'
+
+const SCHOOL_MODE_INDEX = 4
 
 interface InputValue {
   text: string
@@ -96,6 +100,11 @@ export function useAppKeyboard({
   // Key intercept for input - handles Shift+M before input processes it
   const handleKeyIntercept = useCallback(
     (key: KeyEvent): boolean => {
+      // Debug: Log all Enter key presses
+      if (key.name === 'return' || key.name === 'enter') {
+        console.error('[DEBUG -1] Enter pressed, showCommands:', showCommands, 'showContext:', showContext, 'contextFocusPhase:', contextFocusPhase)
+      }
+
       // Let ConfigPanel handle its own keyboard events
       if (showConfigPanel) {
         return false // don't intercept, let ConfigPanel handle it
@@ -105,6 +114,113 @@ export function useAppKeyboard({
       if (showStatusPanel && setShowStatusPanel) {
         setShowStatusPanel(false)
         return true // consume the key
+      }
+
+      // School mode keyboard handling
+      if (modeIndex === SCHOOL_MODE_INDEX) {
+        const schoolStore = useSchoolStore.getState()
+
+        // Arrow navigation in school sidebar
+        if (key.name === 'up') {
+          schoolStore.navigateUp()
+          return true
+        }
+        if (key.name === 'down') {
+          schoolStore.navigateDown()
+          return true
+        }
+        if (key.name === 'left') {
+          schoolStore.navigateLeft()
+          return true
+        }
+        if (key.name === 'right') {
+          schoolStore.navigateRight()
+          return true
+        }
+
+        // Enter: select current item (expand category or spawn machine)
+        if (key.name === 'return' || key.name === 'enter') {
+          if (schoolStore.view === 'categories') {
+            schoolStore.navigateRight() // expand category
+            return true
+          }
+          // In machines view, spawn the selected machine
+          if (schoolStore.view === 'machines') {
+            const selectedBox = schoolStore.selectCurrent()
+            if (selectedBox && addMessage) {
+              // Start spawning
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `Spawning ${selectedBox.name}...`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+
+              // Spawn asynchronously
+              void (async () => {
+                try {
+                  // Use platformId if available, otherwise fall back to id
+                  const machineId = selectedBox.platformId
+                    ? `${selectedBox.platform}-${selectedBox.platformId}`
+                    : selectedBox.id
+                  const result = await platformManager.spawnMachine(machineId)
+
+                  if (result.success && result.ip) {
+                    schoolStore.startSession(selectedBox.id, result.ip)
+                    addMessage({
+                      id: `sys-${Date.now()}`,
+                      variant: 'system',
+                      content: `${selectedBox.name} is ready at ${result.ip}`,
+                      timestamp: new Date(),
+                      isComplete: true,
+                    })
+                  } else {
+                    addMessage({
+                      id: `sys-${Date.now()}`,
+                      variant: 'system',
+                      content: `Failed to spawn: ${result.error || 'Unknown error'}`,
+                      timestamp: new Date(),
+                      isComplete: true,
+                    })
+                  }
+                } catch (err) {
+                  addMessage({
+                    id: `sys-${Date.now()}`,
+                    variant: 'system',
+                    content: `Failed to spawn: ${err}`,
+                    timestamp: new Date(),
+                    isComplete: true,
+                  })
+                }
+              })()
+
+              return true
+            }
+          }
+        }
+
+        // Tab: toggle platform filter (all -> htb -> thm -> all)
+        if (key.name === 'tab' && !key.shift) {
+          schoolStore.togglePlatformFilter()
+          return true
+        }
+
+        // Escape: go back or exit school mode
+        if (key.name === 'escape') {
+          if (schoolStore.view === 'machines') {
+            schoolStore.collapseCategory()
+            return true
+          }
+          if (schoolStore.view === 'session') {
+            // Don't allow escape during session - use /stop command
+            return true
+          }
+          // In categories view, escape exits school mode
+          setModeIndex(() => 0)
+          schoolStore.reset()
+          return true
+        }
       }
 
       // Shift+M: cycle through modes (only cyclable modes, not school)
@@ -258,7 +374,14 @@ export function useAppKeyboard({
             process.exit(0)
           }
           if (cmd === '/clear' || cmd === '/reset' || cmd === '/new') {
-            // TODO: Clear conversation history
+            // Create a new root thread and switch to it
+            const createThread = useThreadStore.getState().createThread
+            const switchThreadAction = useThreadStore.getState().switchThread
+            const newThreadId = createThread('New conversation')
+            switchThreadAction(newThreadId)
+            // Clear UI messages and terminal
+            if (clearMessages) clearMessages()
+            process.stdout.write('\x1b[2J\x1b[H')
             return true
           }
           if (cmd === '/context' || cmd === '/status') {
@@ -343,7 +466,7 @@ export function useAppKeyboard({
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, showConfigPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut, contextFocusPhase, worktreeNav, switchThread, forkThread, compactThread, addMessageToThread, addMessage, clearMessages, currentThreadId, worktreeAction],
+    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, showConfigPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, modeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut, contextFocusPhase, worktreeNav, switchThread, forkThread, compactThread, addMessageToThread, addMessage, clearMessages, currentThreadId, worktreeAction],
   )
 
   // Global keyboard handler for Ctrl+C, Ctrl+O, Escape, and backspace

@@ -4,7 +4,6 @@ import { ToolInvocation } from '../tool-invocation'
 import { ThinkingIndicator } from '../thinking-indicator'
 import { InterruptedIndicator } from './InterruptedIndicator'
 import { FeedbackIndicator } from './FeedbackIndicator'
-import { Markdown } from '../markdown'
 import { copyToClipboard } from '../../utils/clipboard'
 import type { ToolCall, FeedbackValue } from '../../types/chat'
 
@@ -74,17 +73,14 @@ export const AIMessage = ({
       )}
       {/* AI message content with markdown - click to copy */}
       {content && (
-        <box style={{ flexDirection: 'column' }} onMouseDown={handleCopy}>
-          {copied && <text style={{ fg: theme.success }}>copied*</text>}
-          {isStreaming ? (
-            // While streaming, show plain text with cursor
-            <text style={{ fg: theme.muted, wrapMode: 'word' }}>
-              {content}{'▌'}
+        <box style={{ flexDirection: 'row' }} onMouseDown={handleCopy}>
+          <text style={{ fg: theme.foreground, marginRight: 1 }}>⏺</text>
+          <box style={{ flexDirection: 'column', flexGrow: 1 }}>
+            {copied && <text style={{ fg: theme.success }}>copied*</text>}
+            <text style={{ fg: theme.foreground, wrapMode: 'word' }}>
+              {content}{isStreaming && '▌'}
             </text>
-          ) : (
-            // When complete, render markdown
-            <Markdown content={content} />
-          )}
+          </box>
         </box>
       )}
       {/* Tool invocations */}

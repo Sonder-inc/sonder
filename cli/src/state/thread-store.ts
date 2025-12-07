@@ -121,11 +121,11 @@ export const useThreadStore = create<ThreadStore>()(
     },
 
     switchThread: (threadId) => {
-      const threads = get().threads
-      const thread = threads.find((t) => t.id === threadId)
-      if (!thread) return
-
       set((state) => {
+        // Check thread exists in current state
+        const thread = state.threads.find((t) => t.id === threadId)
+        if (!thread) return
+
         // Mark old thread as visited
         const oldThread = state.threads.find((t) => t.id === state.currentThreadId)
         if (oldThread && oldThread.id !== threadId) {
@@ -134,11 +134,8 @@ export const useThreadStore = create<ThreadStore>()(
         }
 
         // Mark new thread as current
-        const newThread = state.threads.find((t) => t.id === threadId)
-        if (newThread) {
-          newThread.status = 'current'
-          saveThread(newThread)
-        }
+        thread.status = 'current'
+        saveThread(thread)
 
         state.currentThreadId = threadId
         state.threadTree = buildThreadTree(state.threads)

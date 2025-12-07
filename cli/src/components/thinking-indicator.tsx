@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TextAttributes } from '@opentui/core'
 import { useTheme } from '../hooks/use-theme'
+import { Clickable } from './clickable'
 
 export interface ThinkingIndicatorProps {
   status: 'thinking' | 'complete'
@@ -57,7 +58,7 @@ export const ThinkingIndicator = ({
   return (
     <box style={{ flexDirection: 'column', marginBottom: 1 }}>
       {/* Thinking status line - click to expand */}
-      <box onMouseDown={handleClick}>
+      <Clickable onClick={status === 'complete' && content ? handleClick : undefined}>
         <text style={{ wrapMode: 'none' }}>
           <span fg={theme.muted}>
             {status === 'thinking' ? SPINNER_FRAMES[spinnerFrame] : '∴'}{' '}
@@ -71,7 +72,7 @@ export const ThinkingIndicator = ({
             </span>
           )}
         </text>
-      </box>
+      </Clickable>
 
       {/* Expanded thinking content */}
       {expanded && content && (

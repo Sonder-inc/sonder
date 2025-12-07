@@ -1,4 +1,4 @@
-import { initUserConfig, getUserConfigInfo } from './user-config'
+import { initUserConfig } from './user-config'
 import { initToolRegistry } from '../tools/registry'
 import { initAgentRegistry } from '../agents/registry'
 import { mcpManager } from '../services/mcp-manager'
@@ -22,17 +22,16 @@ export interface InitResult {
 
 /**
  * Initialize Sonder - called at startup
- * Sets up user config directories, loads user extensions
  */
 export async function initSonder(): Promise<InitResult> {
   // 1. Ensure ~/.sonder directory structure exists
   const { created, path } = initUserConfig()
 
-  // 2. Load user tools into registry
-  const tools = await initToolRegistry()
-
-  // 3. Load user agents into registry
+  // 2. Load user agents into registry (must be before tools, agents are exposed as tools)
   const agents = await initAgentRegistry()
+
+  // 3. Load user tools into registry (includes agent-as-tool adapters)
+  const tools = await initToolRegistry()
 
   // 4. Initialize MCP manager
   const mcps = await mcpManager.init()

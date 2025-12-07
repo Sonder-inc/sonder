@@ -1,4 +1,5 @@
 import { useTheme } from '../hooks/use-theme'
+import { getUserTierInfo } from '../utils/auth'
 
 const SONDER_LOGO = [
   '▐▛███▜▌',
@@ -18,10 +19,14 @@ export const WelcomeBanner = ({
   width,
   version,
   machineInfo,
-  modelInfo = 'max - black',
+  modelInfo,
   mode = 'stealth',
 }: WelcomeBannerProps) => {
   const theme = useTheme()
+
+  // Get tier info - shows 'unknown' if not logged in
+  const tierInfo = getUserTierInfo()
+  const displayTier = modelInfo ?? (tierInfo.isLoggedIn ? `${tierInfo.tier}` : 'unknown')
   const isSchoolMode = mode === 'school'
   const borderFg = isSchoolMode ? theme.accent : theme.borderColor
 
@@ -69,7 +74,7 @@ export const WelcomeBanner = ({
     buildRow(SONDER_LOGO[1], 'Recent activity'),         // logo line 2 / activity header
     buildRow(SONDER_LOGO[2], 'No recent sessions'),      // logo line 3 / activity text
     buildRow('', ''),                                    // spacer
-    buildRow(' ' + modelInfo, ''),                        // model info
+    buildRow(' ' + displayTier, ''),                       // tier info
     buildRow(machineInfo, ''),                           // machine info
     buildRow('', ''),                                    // bottom padding
   ]

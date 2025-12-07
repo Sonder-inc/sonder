@@ -1,7 +1,7 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { streamText, generateText } from 'ai'
 import type { CoreMessage } from 'ai'
-import { availableTools } from '../tools'
+import { getAvailableTools } from '../tools'
 
 export type Message = CoreMessage
 
@@ -167,10 +167,12 @@ export async function streamChat(
       : undefined,
   })
 
+  const toolsToUse = useTools ? getAvailableTools() : undefined
+
   const result = streamText({
     model: openrouter(model),
     messages,
-    tools: useTools ? availableTools : undefined,
+    tools: toolsToUse,
     abortSignal,
   })
 

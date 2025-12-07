@@ -158,6 +158,7 @@ export const useChatStore = create<ChatStore>()(
 
     appendToStreamingMessage: (content) =>
       set((state) => {
+        console.error('[DEBUG 5] appendToStreamingMessage:', state.streamingMessageId, content.length, 'chars')
         if (state.streamingMessageId) {
           const message = state.messages.find(
             (m) => m.id === state.streamingMessageId,

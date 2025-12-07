@@ -6,8 +6,9 @@ import { useChatHandler } from './hooks/use-chat-handler'
 import { useAppKeyboard } from './hooks/use-app-keyboard'
 import { useSchoolMode } from './hooks/use-school-mode'
 import { useChatStore } from './state/chat-store'
-import { usePlanStore } from './state/plan-store'
 import { useThreadStore } from './state/thread-store'
+import { useSchoolStore } from './state/school-store'
+import { platformManager } from './services/platform'
 import { InputBox, type MultilineInputHandle } from './components/input'
 import { WelcomeBanner } from './components/welcome-banner'
 import { StreamingStatus } from './components/streaming-status'
@@ -73,8 +74,12 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     exitSchoolMode,
     selectPlatform,
     selectMachine,
+    submitFlag,
     isActive: isSchoolActive,
   } = useSchoolMode()
+
+  // School store for progress tracking
+  const schoolStore = useSchoolStore()
 
   const {
     messages,
@@ -201,8 +206,12 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
   }, [updateMessage])
 
   const handleSubmit = useCallback(() => {
+    console.error('[DEBUG 0] handleSubmit called, inputValue:', inputValue.slice(0, 30))
     const trimmed = inputValue.trim()
-    if (!trimmed || isStreaming) return
+    if (!trimmed || isStreaming) {
+      console.error('[DEBUG 0b] Early return - trimmed:', !!trimmed, 'isStreaming:', isStreaming)
+      return
+    }
 
     // Parse commands
     if (trimmed.startsWith('/')) {
@@ -229,10 +238,19 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
 
         case '/clear':
         case '/reset':
-        case '/new':
-          // TODO: Clear conversation history
+        case '/new': {
+          // Create a new root thread and switch to it
+          const createThread = useThreadStore.getState().createThread
+          const switchThread = useThreadStore.getState().switchThread
+          const newThreadId = createThread('New conversation')
+          switchThread(newThreadId)
+          // Clear UI messages
+          clearMessages()
+          // Clear terminal screen
+          process.stdout.write('\x1b[2J\x1b[H')
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
+        }
 
         case '/init':
           // TODO: Initialize sonder in current directory
@@ -349,6 +367,114 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
 
+        case '/flag': {
+          const flag = trimmed.slice(6).trim()
+          if (!flag) {
+            addMessage({
+              id: `sys-${Date.now()}`,
+              variant: 'system',
+              content: 'Usage: /flag <flag>',
+              timestamp: new Date(),
+              isComplete: true,
+            })
+            setInputValue({ text: '/flag ', cursorPosition: 6, lastEditDueToNav: false })
+            return
+          }
+
+          // Submit flag
+          void (async () => {
+            const result = await submitFlag(flag)
+            addMessage({
+              id: `sys-${Date.now()}`,
+              variant: 'system',
+              content: result.correct
+                ? `Flag accepted! ${result.message}`
+                : `Incorrect flag: ${result.message}`,
+              timestamp: new Date(),
+              isComplete: true,
+            })
+
+            // Update school store progress
+            if (result.correct && schoolStore.activeBoxId) {
+              if (result.message.toLowerCase().includes('root')) {
+                schoolStore.markRootOwned(schoolStore.activeBoxId)
+              } else {
+                schoolStore.markUserOwned(schoolStore.activeBoxId)
+              }
+            }
+          })()
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+        }
+
+        case '/hint':
+          addMessage({
+            id: `sys-${Date.now()}`,
+            variant: 'system',
+            content: 'Requesting hint... (hint system coming soon)',
+            timestamp: new Date(),
+            isComplete: true,
+          })
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
+        case '/stop': {
+          const machineId = schoolStore.activeBoxId
+          if (!machineId) {
+            addMessage({
+              id: `sys-${Date.now()}`,
+              variant: 'system',
+              content: 'No active machine to stop',
+              timestamp: new Date(),
+              isComplete: true,
+            })
+            setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+            return
+          }
+
+          void (async () => {
+            addMessage({
+              id: `sys-${Date.now()}`,
+              variant: 'system',
+              content: 'Stopping machine...',
+              timestamp: new Date(),
+              isComplete: true,
+            })
+
+            try {
+              const result = await platformManager.stopMachine(machineId)
+              if (result.success) {
+                schoolStore.endSession()
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'system',
+                  content: 'Machine stopped',
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              } else {
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'system',
+                  content: `Failed to stop machine: ${result.error}`,
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              }
+            } catch (err) {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `Failed to stop machine: ${err}`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            }
+          })()
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+        }
+
         case '/doctor':
         case '/login':
         case '/logout':
@@ -362,7 +488,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
 
     handleSendMessage(trimmed)
     setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel, setShowConfigPanel, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode, setQuestionWizard])
+  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel, setShowConfigPanel, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode, setQuestionWizard, submitFlag, isSchoolActive, schoolStore])
 
   useEffect(() => {
     if (initialPrompt && messages.length === 0) {
@@ -512,7 +638,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
       </box>
 
       {/* Sidebar - full height */}
-      <Sidebar width={sidebarWidth} smartShortcut={smartShortcut} />
+      <Sidebar width={sidebarWidth} smartShortcut={smartShortcut} isSchoolMode={modeIndex === SCHOOL_MODE_INDEX} />
     </box>
   )
 }
