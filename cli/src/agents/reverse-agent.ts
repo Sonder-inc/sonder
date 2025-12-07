@@ -2,13 +2,38 @@
  * Reverse Agent - Reverse Engineering Analysis
  *
  * Analyzes binaries, decompiled code, and RE challenges.
- * Uses generator pattern with structured output.
  */
 
-import { z } from 'zod'
-import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
+import { defineSimpleAgent } from './simple-agent'
 
-const REVERSE_SYSTEM_PROMPT = `You are a reverse engineering analysis agent. You analyze binaries, decompiled code, and RE challenges.
+export interface ReverseResult {
+  analysis: {
+    binaryType: string
+    architecture: string
+    protections: string[]
+  }
+  functions: Array<{ name: string; purpose: string; interesting: boolean }>
+  vulnerabilities: string[]
+  approach: string[]
+  tools: string[]
+}
+
+export const reverseAgent = defineSimpleAgent<ReverseResult>({
+  name: 'reverse',
+  description: 'Analyzes binaries and reverse engineering challenges.',
+  spawnerPrompt: 'Analyzes binaries, disassembly, and decompiled code. Identifies vulnerabilities and suggests RE approaches.',
+
+  parameters: {
+    type: 'object',
+    properties: {
+      code: { type: 'string', description: 'Disassembly, decompiled code, or binary info' },
+      context: { type: 'string', description: 'Challenge context or goal' },
+      fileInfo: { type: 'string', description: 'Output of file/checksec commands' },
+    },
+    required: ['code'],
+  },
+
+  systemPrompt: `You are a reverse engineering analysis agent. You analyze binaries, decompiled code, and RE challenges.
 
 Capabilities:
 - Analyze disassembly/decompiled code
@@ -31,45 +56,5 @@ Output format (JSON):
   "tools": ["gdb", "ghidra", "radare2"]
 }
 
-Only output JSON, nothing else.`
-
-const reverseParams = z.object({
-  code: z.string().describe('Disassembly, decompiled code, or binary info'),
-  context: z.string().optional().describe('Challenge context or goal'),
-  fileInfo: z.string().optional().describe('Output of file/checksec commands'),
-})
-
-export interface ReverseResult {
-  analysis: {
-    binaryType: string
-    architecture: string
-    protections: string[]
-  }
-  functions: Array<{ name: string; purpose: string; interesting: boolean }>
-  vulnerabilities: string[]
-  approach: string[]
-  tools: string[]
-}
-
-export const reverseAgent = defineGeneratorAgent<typeof reverseParams, ReverseResult>({
-  name: 'reverse',
-  id: 'reverse',
-  model: 'anthropic/claude-3.5-haiku',
-
-  description: 'Analyzes binaries and reverse engineering challenges.',
-
-  spawnerPrompt: 'Analyzes binaries, disassembly, and decompiled code. Identifies vulnerabilities and suggests RE approaches.',
-
-  outputMode: 'structured_output',
-
-  systemPrompt: REVERSE_SYSTEM_PROMPT,
-
-  parameters: reverseParams,
-
-  *handleSteps({
-    params,
-  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
-    // Pure LLM RE analysis - just run a step
-    yield 'STEP'
-  },
+Only output JSON, nothing else.`,
 })
