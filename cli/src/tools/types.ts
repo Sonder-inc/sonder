@@ -42,3 +42,29 @@ export function defineTool<TParams extends z.ZodType>(
 ): ToolDefinition<TParams> {
   return config
 }
+
+// =============================================================================
+// Unified Tool Registry Types
+// =============================================================================
+
+/**
+ * Source of a tool in the unified registry
+ * - builtin: Core tools exposed to main agent
+ * - internal: Tools only available to subagents (not exposed to main agent)
+ * - user: User-defined tools from ~/.sonder/tools/
+ * - mcp: Tools from MCP servers
+ * - agent: Agents exposed as callable tools
+ */
+export type ToolSource = 'builtin' | 'internal' | 'user' | 'mcp' | 'agent'
+
+/**
+ * Registered tool with metadata about its source
+ */
+export interface RegisteredTool {
+  definition: ToolDefinition
+  source: ToolSource
+  /** For MCP tools: which server provides this tool */
+  mcpServer?: string
+  /** For agent tools: original agent name */
+  agentName?: string
+}
