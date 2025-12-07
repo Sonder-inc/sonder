@@ -40,13 +40,16 @@ export type { AgentName } from './registry'
 // Types - for creating new agents
 export type { AgentResult, AgentContext, AgentDefinition } from './types'
 export { defineAgent } from './types'
+export { defineSimpleAgent } from './simple-agent'
+export type { SimpleAgentConfig, JsonSchema, JsonSchemaProperty } from './simple-agent'
 
 // Built-in agents
-export { councilAgent } from './council-agent'
+// Note: council and mcp agents removed - agents now callable as tools directly
 export { bestOfNAgent } from './best-of-n-agent'
-export { codeReviewerAgent } from './code-reviewer-agent'
+export { reviewerAgent } from './reviewer-agent'
 export { commanderAgent } from './commander-agent'
 export { editorAgent } from './editor-agent'
+export { exploreAgent } from './explore-agent'
 export { searchFetchAgent } from './researcher-web-agent'
 export { compactAgent } from './context-pruner-agent'
 export { interrogatorAgent } from './interrogator-agent'
@@ -57,4 +60,3 @@ export { reverseAgent } from './reverse-agent'
 export { seAgent } from './se-agent'
 export { vgrepAgent } from './vgrep-agent'
 export { vglobAgent } from './vglob-agent'
-export { mcpAgent } from './mcp-agent'

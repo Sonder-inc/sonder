@@ -21,10 +21,10 @@ export const commanderAgent = defineGeneratorAgent({
   id: 'commander',
   model: 'anthropic/claude-3.5-haiku',
 
-  description: 'Runs a terminal command and analyzes its output',
+  description: 'Runs shell commands like npm, git, test runners. NOT for creating files (use editor instead). NOT for mkdir (editor auto-creates dirs).',
 
   spawnerPrompt:
-    'Runs a single terminal command and describes its output based on what information is requested. Use when you need to execute shell commands and get intelligent analysis of the results.',
+    'Execute shell commands (npm install, git, python, etc) and analyze output. DO NOT use for file creation - use editor tool instead. DO NOT use mkdir - editor auto-creates directories.',
 
   inputSchema: {
     prompt: {

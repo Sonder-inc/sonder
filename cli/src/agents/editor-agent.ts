@@ -27,7 +27,7 @@ export interface EditorResult {
 
 export const editorAgent = defineAgent<typeof editorParams, EditorResult>({
   name: 'editor',
-  description: 'Read, write, and patch files. Handles file operations.',
+  description: 'THE PRIMARY TOOL FOR FILE OPERATIONS. Use this to create, read, or modify any file. Auto-creates directories. Use action="write" with full content to create files. ALWAYS prefer this over shell commands for file creation.',
   systemPrompt: '',
   parameters: editorParams,
 

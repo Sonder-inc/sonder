@@ -61,7 +61,7 @@ export interface CodeReviewerResult {
   approved: boolean
 }
 
-export const codeReviewerAgent = defineGeneratorAgent<typeof codeReviewerParams, CodeReviewerResult>({
+export const reviewerAgent = defineGeneratorAgent<typeof codeReviewerParams, CodeReviewerResult>({
   name: 'reviewer',
   id: 'reviewer',
   model: 'anthropic/claude-3.5-haiku',

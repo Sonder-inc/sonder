@@ -1,103 +1,194 @@
 /**
- * Best-of-N Agent - Solution Evaluation
+ * Best-of-N Agent - Parallel Generation + Selection
  *
- * Evaluates multiple candidate solutions and selects the best one.
- * Uses generator pattern with structured output.
+ * Spawns N instances of an agent in parallel, collects results,
+ * and selects the best one using LLM evaluation.
  */
 
 import { z } from 'zod'
-import { defineGeneratorAgent, type AgentStepContext, type StepResult, type AgentToolCall } from './types'
-
-const BEST_OF_N_SYSTEM_PROMPT = `You are a solution evaluation agent. Given multiple candidate solutions, you:
-
-1. Evaluate each solution against criteria
-2. Identify strengths and weaknesses
-3. Select the best solution with justification
-4. Optionally synthesize a better solution from the best parts
-
-Evaluation criteria:
-- Correctness: Does it solve the problem?
-- Completeness: Does it handle edge cases?
-- Efficiency: Is it optimal?
-- Security: Any vulnerabilities?
-- Maintainability: Is it clean and readable?
-
-Output format (JSON):
-{
-  "evaluations": [
-    {
-      "candidateIndex": 0,
-      "scores": {
-        "correctness": 0-10,
-        "completeness": 0-10,
-        "efficiency": 0-10,
-        "security": 0-10,
-        "maintainability": 0-10
-      },
-      "strengths": ["..."],
-      "weaknesses": ["..."],
-      "totalScore": 0-50
-    }
-  ],
-  "winner": {
-    "index": 0,
-    "justification": "why this is best"
-  },
-  "synthesis": "optional improved solution combining best parts",
-  "recommendation": "final recommendation"
-}
-
-Only output JSON, nothing else.`
+import { defineAgent, type AgentContext, type AgentResult } from './types'
+import { executeAgent, getAgent } from './registry'
+import { streamChat, type Message } from '../services/openrouter'
 
 const bestOfNParams = z.object({
-  task: z.string().describe('The task/problem being solved'),
-  candidates: z.array(z.string()).min(2).describe('Candidate solutions to evaluate'),
+  agent: z.string().describe('Target agent to spawn (e.g., "editor", "commander")'),
+  params: z.record(z.unknown()).describe('Parameters to pass to each agent instance'),
+  n: z.number().min(2).max(5).default(3).describe('Number of parallel instances (2-5)'),
+  prompt: z.string().optional().describe('Task description for evaluation context'),
   criteria: z.array(z.string()).optional().describe('Custom evaluation criteria'),
 })
 
-export interface CandidateEvaluation {
-  candidateIndex: number
-  scores: {
-    correctness: number
-    completeness: number
-    efficiency: number
-    security: number
-    maintainability: number
-  }
-  strengths: string[]
-  weaknesses: string[]
-  totalScore: number
+const EVALUATION_SYSTEM_PROMPT = `You are a solution evaluator. Given multiple candidate outputs from the same task, you must:
+
+1. Compare each candidate's output
+2. Evaluate against the criteria
+3. Select the best one
+
+Output ONLY valid JSON in this exact format:
+{
+  "winner": 0,
+  "justification": "brief explanation of why this candidate is best",
+  "scores": [
+    { "index": 0, "score": 8, "notes": "brief notes" },
+    { "index": 1, "score": 6, "notes": "brief notes" }
+  ]
 }
 
-export interface BestOfNResult {
-  evaluations: CandidateEvaluation[]
-  winner: {
-    index: number
-    justification: string
-  }
-  synthesis?: string
-  recommendation: string
-}
+The "winner" field must be the index (0-based) of the best candidate.`
 
-export const bestOfNAgent = defineGeneratorAgent<typeof bestOfNParams, BestOfNResult>({
+export const bestOfNAgent = defineAgent({
   name: 'best_of_n',
-  id: 'best_of_n',
-  model: 'anthropic/claude-3.5-haiku',
+  description: 'Spawn N instances of an agent in parallel and select the best result.',
 
-  description: 'Evaluate multiple candidate solutions and select the best one.',
-
-  spawnerPrompt: 'Evaluates multiple candidate solutions against criteria and selects the best one. Useful for comparing different approaches or implementations.',
-
-  outputMode: 'structured_output',
-
-  systemPrompt: BEST_OF_N_SYSTEM_PROMPT,
+  systemPrompt: EVALUATION_SYSTEM_PROMPT,
 
   parameters: bestOfNParams,
 
-  *handleSteps({
-    params,
-  }: AgentStepContext): Generator<AgentToolCall | 'STEP' | 'STEP_ALL', void, StepResult> {
-    // Pure LLM evaluation - just run a step
-    yield 'STEP'
+  async execute(params, context: AgentContext): Promise<AgentResult> {
+    const { agent: agentName, params: agentParams, n, prompt, criteria } = params
+
+    // Validate target agent exists
+    const targetAgent = getAgent(agentName)
+    if (!targetAgent) {
+      return {
+        success: false,
+        summary: `Unknown agent: ${agentName}`,
+      }
+    }
+
+    // Spawn N instances in parallel
+    const results = await Promise.all(
+      Array(n)
+        .fill(null)
+        .map(() => executeAgent(agentName, agentParams, context))
+    )
+
+    // Count successes
+    const successful = results.filter(r => r.success)
+
+    if (successful.length === 0) {
+      return {
+        success: false,
+        summary: `All ${n} instances failed`,
+        data: { allResults: results },
+      }
+    }
+
+    if (successful.length === 1) {
+      const winnerIndex = results.findIndex(r => r.success)
+      return {
+        success: true,
+        summary: `Only 1/${n} succeeded, returning it`,
+        data: {
+          winner: {
+            index: winnerIndex,
+            result: successful[0],
+            justification: 'Only successful result',
+          },
+          allResults: results,
+        },
+      }
+    }
+
+    // Multiple successes - use LLM to evaluate
+    const criteriaText = criteria?.length
+      ? `Evaluation criteria:\n${criteria.map(c => `- ${c}`).join('\n')}`
+      : 'Evaluate for correctness, completeness, and quality.'
+
+    const candidatesText = results
+      .map((r, i) => {
+        const status = r.success ? 'SUCCESS' : 'FAILED'
+        const content = r.success ? (r.data ? JSON.stringify(r.data, null, 2) : r.summary) : r.summary
+        return `=== Candidate ${i} [${status}] ===\n${content}`
+      })
+      .join('\n\n')
+
+    const evaluationPrompt = `Task: ${prompt || 'Compare the outputs'}
+
+${criteriaText}
+
+${candidatesText}
+
+Select the best candidate and output JSON.`
+
+    try {
+      // Call LLM for evaluation
+      let fullResponse = ''
+      const messages: Message[] = [
+        { role: 'system', content: EVALUATION_SYSTEM_PROMPT },
+        { role: 'user', content: evaluationPrompt },
+      ]
+
+      await streamChat(
+        messages,
+        { onChunk: (chunk) => { fullResponse += chunk } },
+        'anthropic/claude-3.5-haiku',
+        undefined,
+        false // no tools needed for evaluation
+      )
+
+      // Parse JSON response
+      const jsonMatch = fullResponse.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error('No JSON in response')
+      }
+
+      const evaluation = JSON.parse(jsonMatch[0]) as {
+        winner: number
+        justification: string
+        scores?: Array<{ index: number; score: number; notes: string }>
+      }
+
+      const winnerIndex = evaluation.winner
+      const winnerResult = results[winnerIndex]
+
+      if (!winnerResult || !winnerResult.success) {
+        // Fallback to first successful
+        const fallbackIndex = results.findIndex(r => r.success)
+        return {
+          success: true,
+          summary: `Selected candidate ${fallbackIndex} (LLM picked invalid winner)`,
+          data: {
+            winner: {
+              index: fallbackIndex,
+              result: results[fallbackIndex],
+              justification: 'Fallback selection',
+            },
+            allResults: results,
+            evaluation,
+          },
+        }
+      }
+
+      return {
+        success: true,
+        summary: `Selected candidate ${winnerIndex}/${n}: ${evaluation.justification.slice(0, 50)}`,
+        data: {
+          winner: {
+            index: winnerIndex,
+            result: winnerResult,
+            justification: evaluation.justification,
+          },
+          allResults: results,
+          evaluation,
+        },
+      }
+    } catch (error) {
+      // Fallback: return first successful result
+      const fallbackIndex = results.findIndex(r => r.success)
+      return {
+        success: true,
+        summary: `Selected candidate ${fallbackIndex} (evaluation failed)`,
+        data: {
+          winner: {
+            index: fallbackIndex,
+            result: results[fallbackIndex],
+            justification: 'Evaluation failed, returning first success',
+          },
+          allResults: results,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      }
+    }
   },
 })
