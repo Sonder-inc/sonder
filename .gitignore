@@ -93,3 +93,5 @@ CLAUDE.md
 .sonder/
 
 cli/test-headless.sh
+evals
+sonder.md
