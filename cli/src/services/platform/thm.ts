@@ -1,118 +1,26 @@
 /**
  * TryHackMe API client
- * Implements IPlatform interface for THM
- *
- * THM uses a JWT-based auth system
+ * Extends BasePlatformClient with THM-specific API mappings
  */
 
 import type { Machine, SpawnResult, FlagResult, Difficulty } from '../../types/platform'
-import type { IPlatform, PlatformCredentials, PlatformUser, VPNConfig, MachineFilters } from './types'
-import { writeFile, mkdir } from 'fs/promises'
-import { homedir } from 'os'
-import { join } from 'path'
+import type { PlatformUser, VPNConfig, MachineFilters } from './types'
+import { BasePlatformClient, type PlatformConfig } from './base-platform'
 
-const THM_API_BASE = 'https://tryhackme.com/api/v2'
-const THM_AUTH_URL = 'https://tryhackme.com/oauth/authorize'
-const THM_TOKEN_URL = 'https://tryhackme.com/oauth/token'
+const THM_CONFIG: PlatformConfig = {
+  name: 'thm',
+  displayName: 'TryHackMe',
+  apiBase: 'https://tryhackme.com/api/v2',
+  authUrl: 'https://tryhackme.com/oauth/authorize',
+  tokenUrl: 'https://tryhackme.com/oauth/token',
+  clientId: process.env.THM_CLIENT_ID || 'sonder-cli',
+  scopes: 'user:read rooms:read rooms:write vpn:read',
+}
 
-const CLIENT_ID = process.env.THM_CLIENT_ID || 'sonder-cli'
-const REDIRECT_URI = 'http://localhost:31337/callback'
+export class TryHackMeClient extends BasePlatformClient {
+  protected readonly config = THM_CONFIG
 
-export class TryHackMeClient implements IPlatform {
-  readonly name = 'thm' as const
-  readonly displayName = 'TryHackMe'
-
-  private credentials: PlatformCredentials | null = null
-  private user: PlatformUser | null = null
-
-  // ─── Auth ────────────────────────────────────────────────────────────────────
-
-  isAuthenticated(): boolean {
-    if (!this.credentials?.accessToken) return false
-    if (this.credentials.expiresAt && this.credentials.expiresAt < new Date()) {
-      return false
-    }
-    return true
-  }
-
-  getAuthUrl(): string {
-    const params = new URLSearchParams({
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-      response_type: 'code',
-      scope: 'user:read rooms:read rooms:write vpn:read',
-    })
-    return `${THM_AUTH_URL}?${params.toString()}`
-  }
-
-  async handleOAuthCallback(code: string): Promise<PlatformCredentials> {
-    const res = await fetch(THM_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
-        code,
-      }),
-    })
-
-    if (!res.ok) {
-      throw new Error(`THM OAuth failed: ${res.status}`)
-    }
-
-    const data = (await res.json()) as {
-      access_token: string
-      refresh_token: string
-      expires_in: number
-    }
-    this.credentials = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
-    }
-
-    return this.credentials
-  }
-
-  setCredentials(creds: PlatformCredentials): void {
-    this.credentials = creds
-  }
-
-  getCredentials(): PlatformCredentials | null {
-    return this.credentials
-  }
-
-  logout(): void {
-    this.credentials = null
-    this.user = null
-  }
-
-  // ─── API Helpers ─────────────────────────────────────────────────────────────
-
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    if (!this.credentials?.accessToken) {
-      throw new Error('Not authenticated with TryHackMe')
-    }
-
-    const res = await fetch(`${THM_API_BASE}${endpoint}`, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${this.credentials.accessToken}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    })
-
-    if (!res.ok) {
-      const error = await res.text()
-      throw new Error(`THM API error ${res.status}: ${error}`)
-    }
-
-    return (await res.json()) as T
-  }
-
-  // ─── User ────────────────────────────────────────────────────────────────────
+  // ─── User ──────────────────────────────────────────────────────────────────
 
   async getCurrentUser(): Promise<PlatformUser> {
     if (this.user) return this.user
@@ -140,33 +48,23 @@ export class TryHackMeClient implements IPlatform {
     return this.user
   }
 
-  // ─── VPN ─────────────────────────────────────────────────────────────────────
+  // ─── VPN ───────────────────────────────────────────────────────────────────
 
   async downloadVPNConfig(): Promise<string> {
     const data = await this.request<{ data: { config: string } }>('/vpn/config')
-
-    const vpnDir = join(homedir(), '.sonder', 'vpn')
-    await mkdir(vpnDir, { recursive: true })
-    const ovpnPath = join(vpnDir, 'thm.ovpn')
-    await writeFile(ovpnPath, data.data.config)
-
-    return ovpnPath
+    return this.saveVPNConfig(data.data.config)
   }
 
   async getVPNStatus(): Promise<VPNConfig | null> {
     try {
       const data = await this.request<{
-        data: {
-          connected: boolean
-          server: string
-          ip: string
-        }
+        data: { connected: boolean; server: string; ip: string }
       }>('/vpn/status')
 
       if (!data.data.connected) return null
 
       return {
-        ovpnPath: join(homedir(), '.sonder', 'vpn', 'thm.ovpn'),
+        ovpnPath: this.vpnPath,
         server: data.data.server,
         isConnected: true,
       }
@@ -175,7 +73,7 @@ export class TryHackMeClient implements IPlatform {
     }
   }
 
-  // ─── Machines (THM calls them "rooms") ───────────────────────────────────────
+  // ─── Machines (THM calls them "rooms") ─────────────────────────────────────
 
   async listMachines(filters?: MachineFilters): Promise<Machine[]> {
     const params = new URLSearchParams()
@@ -190,7 +88,7 @@ export class TryHackMeClient implements IPlatform {
         code: string
         title: string
         description: string
-        difficulty: 'easy' | 'medium' | 'hard' | 'insane'
+        difficulty: Difficulty
         type: string
         userCompleted: boolean
         published: string
@@ -200,9 +98,6 @@ export class TryHackMeClient implements IPlatform {
 
     let machines = data.data.map((r) => this.mapRoom(r))
 
-    if (filters?.os) {
-      // THM doesn't expose OS easily, skip filter
-    }
     if (filters?.owned !== undefined) {
       machines = machines.filter((m) => m.userOwned === filters.owned)
     }
@@ -219,7 +114,7 @@ export class TryHackMeClient implements IPlatform {
           code: string
           title: string
           description: string
-          difficulty: 'easy' | 'medium' | 'hard' | 'insane'
+          difficulty: Difficulty
           type: string
           userCompleted: boolean
           published: string
@@ -238,7 +133,7 @@ export class TryHackMeClient implements IPlatform {
     code: string
     title: string
     description?: string
-    difficulty: 'easy' | 'medium' | 'hard' | 'insane'
+    difficulty: Difficulty
     type?: string
     userCompleted?: boolean
     published: string
@@ -249,12 +144,12 @@ export class TryHackMeClient implements IPlatform {
       id: `thm-${r.code}`,
       name: r.title,
       platform: 'thm',
-      difficulty: r.difficulty as Difficulty,
-      os: 'linux', // THM doesn't always specify, default to linux
+      difficulty: r.difficulty,
+      os: 'linux', // THM doesn't always specify
       ip: r.ip,
       status: r.ip ? 'running' : 'offline',
       userOwned: r.userCompleted || false,
-      rootOwned: r.userCompleted || false, // THM doesn't distinguish
+      rootOwned: r.userCompleted || false,
       releaseDate: new Date(r.published),
       tags: r.tags || [],
     }
@@ -266,14 +161,9 @@ export class TryHackMeClient implements IPlatform {
     try {
       const data = await this.request<{
         success: boolean
-        data?: {
-          ip: string
-          expires: string
-        }
+        data?: { ip: string; expires: string }
         error?: string
-      }>(`/rooms/${roomCode}/deploy`, {
-        method: 'POST',
-      })
+      }>(`/rooms/${roomCode}/deploy`, { method: 'POST' })
 
       if (data.success && data.data) {
         return {
@@ -302,9 +192,7 @@ export class TryHackMeClient implements IPlatform {
     const roomCode = id.replace('thm-', '')
 
     try {
-      await this.request(`/rooms/${roomCode}/terminate`, {
-        method: 'POST',
-      })
+      await this.request(`/rooms/${roomCode}/terminate`, { method: 'POST' })
       return { success: true }
     } catch (err) {
       return {
@@ -321,9 +209,7 @@ export class TryHackMeClient implements IPlatform {
       const data = await this.request<{
         success: boolean
         data?: { expires: string }
-      }>(`/rooms/${roomCode}/extend`, {
-        method: 'POST',
-      })
+      }>(`/rooms/${roomCode}/extend`, { method: 'POST' })
 
       if (data.success && data.data) {
         return {
@@ -337,7 +223,7 @@ export class TryHackMeClient implements IPlatform {
     }
   }
 
-  // ─── Flags ───────────────────────────────────────────────────────────────────
+  // ─── Flags ─────────────────────────────────────────────────────────────────
 
   async submitFlag(machineId: string, flag: string): Promise<FlagResult> {
     const roomCode = machineId.replace('thm-', '')
@@ -367,7 +253,7 @@ export class TryHackMeClient implements IPlatform {
     }
   }
 
-  // ─── Active Machine ──────────────────────────────────────────────────────────
+  // ─── Active Machine ────────────────────────────────────────────────────────
 
   async getActiveMachine(): Promise<Machine | null> {
     try {
@@ -375,7 +261,7 @@ export class TryHackMeClient implements IPlatform {
         data: {
           code: string
           title: string
-          difficulty: 'easy' | 'medium' | 'hard' | 'insane'
+          difficulty: Difficulty
           published: string
           ip: string
         } | null

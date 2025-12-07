@@ -1,119 +1,28 @@
 /**
  * HackTheBox API client
- * Implements IPlatform interface for HTB
+ * Extends BasePlatformClient with HTB-specific API mappings
  *
  * API Docs: https://documenter.getpostman.com/view/13129365/TVeqbmeq
  */
 
 import type { Machine, SpawnResult, FlagResult, Difficulty } from '../../types/platform'
-import type { IPlatform, PlatformCredentials, PlatformUser, VPNConfig, MachineFilters } from './types'
-import { writeFile, mkdir } from 'fs/promises'
-import { homedir } from 'os'
-import { join } from 'path'
+import type { PlatformUser, VPNConfig, MachineFilters } from './types'
+import { BasePlatformClient, type PlatformConfig } from './base-platform'
 
-const HTB_API_BASE = 'https://labs.hackthebox.com/api/v4'
-const HTB_AUTH_URL = 'https://app.hackthebox.com/oauth/authorize'
-const HTB_TOKEN_URL = 'https://app.hackthebox.com/oauth/token'
+const HTB_CONFIG: PlatformConfig = {
+  name: 'htb',
+  displayName: 'HackTheBox',
+  apiBase: 'https://labs.hackthebox.com/api/v4',
+  authUrl: 'https://app.hackthebox.com/oauth/authorize',
+  tokenUrl: 'https://app.hackthebox.com/oauth/token',
+  clientId: process.env.HTB_CLIENT_ID || 'sonder-cli',
+  scopes: 'read write',
+}
 
-// HTB OAuth client (you'll need to register an app)
-const CLIENT_ID = process.env.HTB_CLIENT_ID || 'sonder-cli'
-const REDIRECT_URI = 'http://localhost:31337/callback'
+export class HackTheBoxClient extends BasePlatformClient {
+  protected readonly config = HTB_CONFIG
 
-export class HackTheBoxClient implements IPlatform {
-  readonly name = 'htb' as const
-  readonly displayName = 'HackTheBox'
-
-  private credentials: PlatformCredentials | null = null
-  private user: PlatformUser | null = null
-
-  // ─── Auth ────────────────────────────────────────────────────────────────────
-
-  isAuthenticated(): boolean {
-    if (!this.credentials?.accessToken) return false
-    if (this.credentials.expiresAt && this.credentials.expiresAt < new Date()) {
-      return false
-    }
-    return true
-  }
-
-  getAuthUrl(): string {
-    const params = new URLSearchParams({
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-      response_type: 'code',
-      scope: 'read write',
-    })
-    return `${HTB_AUTH_URL}?${params.toString()}`
-  }
-
-  async handleOAuthCallback(code: string): Promise<PlatformCredentials> {
-    const res = await fetch(HTB_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
-        code,
-      }),
-    })
-
-    if (!res.ok) {
-      throw new Error(`HTB OAuth failed: ${res.status}`)
-    }
-
-    const data = (await res.json()) as {
-      access_token: string
-      refresh_token: string
-      expires_in: number
-    }
-    this.credentials = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
-    }
-
-    return this.credentials
-  }
-
-  setCredentials(creds: PlatformCredentials): void {
-    this.credentials = creds
-  }
-
-  getCredentials(): PlatformCredentials | null {
-    return this.credentials
-  }
-
-  logout(): void {
-    this.credentials = null
-    this.user = null
-  }
-
-  // ─── API Helpers ─────────────────────────────────────────────────────────────
-
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    if (!this.credentials?.accessToken) {
-      throw new Error('Not authenticated with HackTheBox')
-    }
-
-    const res = await fetch(`${HTB_API_BASE}${endpoint}`, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${this.credentials.accessToken}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    })
-
-    if (!res.ok) {
-      const error = await res.text()
-      throw new Error(`HTB API error ${res.status}: ${error}`)
-    }
-
-    return (await res.json()) as T
-  }
-
-  // ─── User ────────────────────────────────────────────────────────────────────
+  // ─── User ──────────────────────────────────────────────────────────────────
 
   async getCurrentUser(): Promise<PlatformUser> {
     if (this.user) return this.user
@@ -141,37 +50,23 @@ export class HackTheBoxClient implements IPlatform {
     return this.user
   }
 
-  // ─── VPN ─────────────────────────────────────────────────────────────────────
+  // ─── VPN ───────────────────────────────────────────────────────────────────
 
   async downloadVPNConfig(): Promise<string> {
-    const data = await this.request<{ data: string }>('/access/ovpnfile', {
-      method: 'GET',
-    })
-
-    // Save to ~/.sonder/vpn/htb.ovpn
-    const vpnDir = join(homedir(), '.sonder', 'vpn')
-    await mkdir(vpnDir, { recursive: true })
-    const ovpnPath = join(vpnDir, 'htb.ovpn')
-    await writeFile(ovpnPath, data.data)
-
-    return ovpnPath
+    const data = await this.request<{ data: string }>('/access/ovpnfile')
+    return this.saveVPNConfig(data.data)
   }
 
   async getVPNStatus(): Promise<VPNConfig | null> {
     try {
       const data = await this.request<{
-        data: {
-          connection: {
-            ip: string
-            server: string
-          } | null
-        }
+        data: { connection: { ip: string; server: string } | null }
       }>('/access/status')
 
       if (!data.data.connection) return null
 
       return {
-        ovpnPath: join(homedir(), '.sonder', 'vpn', 'htb.ovpn'),
+        ovpnPath: this.vpnPath,
         server: data.data.connection.server,
         isConnected: true,
       }
@@ -180,10 +75,9 @@ export class HackTheBoxClient implements IPlatform {
     }
   }
 
-  // ─── Machines ────────────────────────────────────────────────────────────────
+  // ─── Machines ──────────────────────────────────────────────────────────────
 
   async listMachines(filters?: MachineFilters): Promise<Machine[]> {
-    // HTB has separate endpoints for active/retired
     const endpoint = filters?.retired ? '/machine/list/retired' : '/machine/list'
 
     const data = await this.request<{
@@ -191,7 +85,7 @@ export class HackTheBoxClient implements IPlatform {
         id: number
         name: string
         os: string
-        difficulty: number // 1-100
+        difficulty: number
         user_owns_count: number
         root_owns_count: number
         authUserInUserOwns: boolean
@@ -204,7 +98,6 @@ export class HackTheBoxClient implements IPlatform {
 
     let machines = data.info.map((m) => this.mapMachine(m))
 
-    // Apply filters
     if (filters?.difficulty) {
       machines = machines.filter((m) => m.difficulty === filters.difficulty)
     }
@@ -266,7 +159,7 @@ export class HackTheBoxClient implements IPlatform {
       userOwned: m.authUserInUserOwns || false,
       rootOwned: m.authUserInRootOwns || false,
       releaseDate: new Date(m.release),
-      tags: [], // HTB doesn't expose tags via API easily
+      tags: [],
     }
   }
 
@@ -285,19 +178,18 @@ export class HackTheBoxClient implements IPlatform {
         success: string
         status: string
         message?: string
-      }>(`/vm/spawn`, {
+      }>('/vm/spawn', {
         method: 'POST',
         body: JSON.stringify({ machine_id: parseInt(machineId) }),
       })
 
       if (data.success === '1') {
-        // Poll for IP assignment
         const machine = await this.pollForIP(machineId)
         return {
           success: true,
           machineId: id,
           ip: machine?.ip,
-          expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours
+          expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
         }
       }
 
@@ -328,7 +220,7 @@ export class HackTheBoxClient implements IPlatform {
     const machineId = id.replace('htb-', '')
 
     try {
-      await this.request(`/vm/terminate`, {
+      await this.request('/vm/terminate', {
         method: 'POST',
         body: JSON.stringify({ machine_id: parseInt(machineId) }),
       })
@@ -345,7 +237,7 @@ export class HackTheBoxClient implements IPlatform {
     const machineId = id.replace('htb-', '')
 
     try {
-      await this.request(`/vm/extend`, {
+      await this.request('/vm/extend', {
         method: 'POST',
         body: JSON.stringify({ machine_id: parseInt(machineId) }),
       })
@@ -358,7 +250,7 @@ export class HackTheBoxClient implements IPlatform {
     }
   }
 
-  // ─── Flags ───────────────────────────────────────────────────────────────────
+  // ─── Flags ─────────────────────────────────────────────────────────────────
 
   async submitFlag(machineId: string, flag: string): Promise<FlagResult> {
     const id = machineId.replace('htb-', '')
@@ -379,7 +271,7 @@ export class HackTheBoxClient implements IPlatform {
           success: true,
           correct: true,
           flagType: 'user',
-          message: 'User flag correct! 🎉',
+          message: 'User flag correct!',
         }
       }
 
@@ -398,7 +290,7 @@ export class HackTheBoxClient implements IPlatform {
           success: true,
           correct: true,
           flagType: 'root',
-          message: 'Root flag correct! 🎉 Machine owned!',
+          message: 'Root flag correct! Machine owned!',
         }
       }
 
@@ -416,7 +308,7 @@ export class HackTheBoxClient implements IPlatform {
     }
   }
 
-  // ─── Active Machine ──────────────────────────────────────────────────────────
+  // ─── Active Machine ────────────────────────────────────────────────────────
 
   async getActiveMachine(): Promise<Machine | null> {
     try {
