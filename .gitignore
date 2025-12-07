@@ -92,3 +92,4 @@ CLAUDE.md
 # Sonder user data
 .sonder/
 
+cli/test-headless.sh
