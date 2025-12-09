@@ -185,13 +185,7 @@ export async function streamChat(
     for await (const part of result.fullStream) {
       if (abortSignal?.aborted) break
 
-      // Debug: log part types to see what we're receiving
-      if (process.env.DEBUG_STREAM) {
-        console.error(`[stream] part.type: ${part.type}`)
-      }
-
       if (part.type === 'reasoning-delta') {
-        // Reasoning/thinking content from thinking models
         callbacks.onReasoning?.(part.text)
       } else if (part.type === 'reasoning-end') {
         // Reasoning phase complete

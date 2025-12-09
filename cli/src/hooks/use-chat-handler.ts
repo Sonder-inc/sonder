@@ -1,15 +1,20 @@
 import { useCallback } from 'react'
 import { streamChat, type Message as APIMessage, type ToolCallRequest } from '../services/openrouter'
+import { claudeService } from '../services/claude'
+import { codexService } from '../services/codex'
 import { useFlavorWord } from './use-flavor-word'
 import { useSmartShortcut } from './use-smart-shortcut'
 import { useStreaming } from './use-streaming'
 import { useToolExecutor } from './use-tool-executor'
 import { useSubgoalStore } from '../state/subgoal-store'
 import { useThreadStore } from '../state/thread-store'
+import { useClaudeSessionStore } from '../state/claude-session-store'
+import { usesClaudeCode, usesCodex, type ModelName } from '../constants/app-constants'
 import type { ChatMessage, ToolCall } from '../types/chat'
 
 interface UseChatHandlerOptions {
-  model: string
+  model: string        // Full model ID (e.g., 'anthropic/claude-3.7-sonnet')
+  modelName: ModelName // Short model name (e.g., 'claude', 'sonder')
   messages: ChatMessage[]
   addMessage: (msg: ChatMessage) => void
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void
@@ -43,6 +48,7 @@ CRITICAL: Complete all subgoals before stopping.`
 
 export function useChatHandler({
   model,
+  modelName,
   messages,
   addMessage,
   updateMessage,
@@ -66,9 +72,12 @@ export function useChatHandler({
   const addMessageToThread = useThreadStore((state) => state.addMessageToThread)
   const checkAutoCompact = useThreadStore((state) => state.checkAutoCompact)
 
+  // Claude session store for resuming conversations
+  const getClaudeSession = useClaudeSessionStore((state) => state.getSession)
+  const setClaudeSession = useClaudeSessionStore((state) => state.setSession)
+
   const handleSendMessage = useCallback(
     async (content: string) => {
-      console.error('[DEBUG 1] handleSendMessage called:', content.slice(0, 50))
 
       // Clear any existing subgoals from previous message
       useSubgoalStore.getState().clear()
@@ -116,29 +125,173 @@ export function useChatHandler({
       let currentMessageId = aiMessageId
 
       try {
-        // Build message history
-        const chatMessages: APIMessage[] = [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...messages
-            .filter((msg) => msg.isComplete && msg.variant !== 'error')
-            .map((msg) => ({
-              role: (msg.variant === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-              content: msg.content,
-            })),
-          { role: 'user' as const, content },
-        ]
+        // Check if model should use Claude Code or Codex headless
+        const useClaudeCodePath = usesClaudeCode(modelName)
+        const useCodexPath = usesCodex(modelName)
 
-        // Agentic tool call loop - continues until taskComplete or abort
-        let continueLoop = true
+        if (useClaudeCodePath) {
+          // Claude Code headless path - Claude handles tools internally
+          const existingSessionId = currentThreadId ? getClaudeSession(currentThreadId) : null
 
-        while (continueLoop && !abortController.signal.aborted) {
+          await claudeService.send(content, {
+            model: 'claude-sonnet-4-20250514', // Claude Code model name
+            sessionId: existingSessionId ?? undefined,
+
+            onInit: (sessionId) => {
+              // Store session ID early for resumption
+              if (currentThreadId && sessionId) {
+                setClaudeSession(currentThreadId, sessionId)
+              }
+            },
+
+            onText: (text) => {
+              appendToStreamingMessage(text)
+              updateTokenCount(Math.ceil(text.length / 4))
+            },
+
+            onThinking: (text) => {
+              if (thinkingStartTime === null) {
+                thinkingStartTime = Date.now()
+                updateMessage(currentMessageId, { isThinking: true })
+              }
+              appendToThinkingContent(text)
+            },
+
+            onThinkingComplete: () => {
+              const duration = thinkingStartTime ? Date.now() - thinkingStartTime : 0
+              updateMessage(currentMessageId, {
+                isThinking: false,
+                thinkingDurationMs: duration,
+              })
+            },
+
+            onToolStart: (id, name, input) => {
+              const toolCall: ToolCall = {
+                id: `tool-${id}`,
+                toolName: name,
+                params: input,
+                status: 'executing',
+                messageId: currentMessageId,
+              }
+              addToolCall(toolCall)
+            },
+
+            onToolResult: (toolUseId, result) => {
+              const resultStr = typeof result === 'string'
+                ? result
+                : JSON.stringify(result, null, 2)
+              updateToolCall(`tool-${toolUseId}`, {
+                status: 'complete',
+                summary: resultStr.slice(0, 100) + (resultStr.length > 100 ? '...' : ''),
+                fullResult: resultStr,
+              })
+            },
+
+            onUsage: (tokens) => {
+              updateTokenCount(tokens)
+            },
+
+            onComplete: (stats) => {
+              // Save session for future resumption
+              if (stats.sessionId && currentThreadId) {
+                setClaudeSession(currentThreadId, stats.sessionId)
+              }
+              updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
+            },
+
+            onError: (error) => {
+              updateMessage(currentMessageId, {
+                content: `Error: ${error.message}`,
+                variant: 'error',
+                isComplete: true,
+                isStreaming: false,
+              })
+            },
+          })
+
+          // Handle abort
+          if (abortController.signal.aborted) {
+            claudeService.cancel()
+          }
+        } else if (useCodexPath) {
+          // Codex CLI headless path - Codex handles tools internally
+
+          await codexService.send(content, {
+            model: process.env.SONDER_CODEX_MODEL || '', // Let Codex use its default model
+
+            onText: (text) => {
+              appendToStreamingMessage(text)
+              updateTokenCount(Math.ceil(text.length / 4))
+            },
+
+            onToolStart: (id, name, input) => {
+              const toolCall: ToolCall = {
+                id: `tool-${id}`,
+                toolName: name,
+                params: input,
+                status: 'executing',
+                messageId: currentMessageId,
+              }
+              addToolCall(toolCall)
+            },
+
+            onToolResult: (toolUseId, result) => {
+              const resultStr = typeof result === 'string'
+                ? result
+                : JSON.stringify(result, null, 2)
+              updateToolCall(`tool-${toolUseId}`, {
+                status: 'complete',
+                summary: resultStr.slice(0, 100) + (resultStr.length > 100 ? '...' : ''),
+                fullResult: resultStr,
+              })
+            },
+
+            onUsage: (tokens) => {
+              updateTokenCount(tokens)
+            },
+
+            onComplete: () => {
+              updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
+            },
+
+            onError: (error) => {
+              updateMessage(currentMessageId, {
+                content: `Error: ${error.message}`,
+                variant: 'error',
+                isComplete: true,
+                isStreaming: false,
+              })
+            },
+          })
+
+          // Handle abort
+          if (abortController.signal.aborted) {
+            codexService.cancel()
+          }
+        } else {
+          // OpenRouter path - existing implementation
+          // Build message history
+          const chatMessages: APIMessage[] = [
+            { role: 'system', content: SYSTEM_PROMPT },
+            ...messages
+              .filter((msg) => msg.isComplete && msg.variant !== 'error')
+              .map((msg) => ({
+                role: (msg.variant === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+                content: msg.content,
+              })),
+            { role: 'user' as const, content },
+          ]
+
+          // Agentic tool call loop - continues until taskComplete or abort
+          let continueLoop = true
+
+          while (continueLoop && !abortController.signal.aborted) {
           const pendingToolCalls: ToolCallRequest[] = []
 
           const result = await streamChat(
             chatMessages,
             {
               onChunk: (chunk, tokens) => {
-                console.error('[DEBUG 4] onChunk:', chunk.length, 'chars')
                 appendToStreamingMessage(chunk)
                 updateTokenCount(tokens)
               },
@@ -249,11 +402,18 @@ export function useChatHandler({
           }
         }
 
-        updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
-        // Link AI message to current thread
-        if (currentThreadId) {
+          updateMessage(currentMessageId, { isComplete: true, isStreaming: false })
+          // Link AI message to current thread
+          if (currentThreadId) {
+            addMessageToThread(currentThreadId, currentMessageId)
+            // Check for auto-compact (fire and forget)
+            void checkAutoCompact()
+          }
+        } // end else (OpenRouter path)
+
+        // Link AI message to current thread (for Claude Code / Codex path)
+        if ((useClaudeCodePath || useCodexPath) && currentThreadId) {
           addMessageToThread(currentThreadId, currentMessageId)
-          // Check for auto-compact (fire and forget)
           void checkAutoCompact()
         }
       } catch (error) {
@@ -285,12 +445,15 @@ export function useChatHandler({
     [
       messages,
       model,
+      modelName,
       addMessage,
       updateMessage,
       appendToStreamingMessage,
       appendToThinkingContent,
       setIsStreaming,
       setStreamingMessageId,
+      addToolCall,
+      updateToolCall,
       incrementUserMessageCount,
       fetchFlavorWord,
       resetFlavorWord,
@@ -304,6 +467,8 @@ export function useChatHandler({
       currentThreadId,
       addMessageToThread,
       checkAutoCompact,
+      getClaudeSession,
+      setClaudeSession,
     ],
   )
 

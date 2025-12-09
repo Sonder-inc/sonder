@@ -8,6 +8,7 @@ import { useSchoolMode } from './hooks/use-school-mode'
 import { useChatStore } from './state/chat-store'
 import { useThreadStore } from './state/thread-store'
 import { useSchoolStore } from './state/school-store'
+import { useAuthStore } from './state/auth-store'
 import { platformManager } from './services/platform'
 import { InputBox, type MultilineInputHandle } from './components/input'
 import { WelcomeBanner } from './components/welcome-banner'
@@ -20,8 +21,9 @@ import { StatusPanel } from './components/panels/StatusPanel'
 import { ConfigPanel } from './components/panels/ConfigPanel'
 import { SchoolModePanel } from './components/school'
 import { QuestionWizard } from './components/QuestionWizard'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar } from './components/sidebar'
 import { SystemInfo } from './components/SystemInfo'
+import { LoginPage } from './components/LoginPage'
 import { MODELS, MODES, getModelId } from './constants/app-constants'
 import { createSupportTicket } from './services/support'
 import type { ScrollBoxRenderable } from '@opentui/core'
@@ -34,6 +36,17 @@ interface AppProps {
 }
 
 export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
+  // Auth check - show login page if not authenticated
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+
+  if (!isAuthenticated) {
+    return <LoginPage />
+  }
+
+  return <AuthenticatedApp initialPrompt={initialPrompt} version={version} launchDir={launchDir} />
+}
+
+const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
   const { terminalWidth } = useTerminalDimensions()
   const scrollRef = useRef<ScrollBoxRenderable | null>(null)
   const inputRef = useRef<MultilineInputHandle | null>(null)
@@ -147,6 +160,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     cancelStream,
   } = useChatHandler({
     model: getModelId(MODELS[modelIndex], thinkingEnabled),
+    modelName: MODELS[modelIndex],
     messages,
     addMessage,
     updateMessage,
@@ -206,10 +220,8 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
   }, [updateMessage])
 
   const handleSubmit = useCallback(() => {
-    console.error('[DEBUG 0] handleSubmit called, inputValue:', inputValue.slice(0, 30))
     const trimmed = inputValue.trim()
     if (!trimmed || isStreaming) {
-      console.error('[DEBUG 0b] Early return - trimmed:', !!trimmed, 'isStreaming:', isStreaming)
       return
     }
 
@@ -476,7 +488,6 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
         }
 
         case '/doctor':
-        case '/login':
         case '/logout':
         case '/add-dir':
         case '/agents':
@@ -504,7 +515,10 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
     <box style={{ flexDirection: 'row', flexGrow: 1, gap: 0 }}>
       {/* Main content column (scrollbox + input) */}
       <box style={{ flexDirection: 'column', flexGrow: 1, width: mainWidth + 2 }}>
-        {/* Messages scrollbox - banner is inside and scrolls with messages */}
+        {/* Banner - fixed at top, collapses after first message */}
+        <WelcomeBanner width={mainWidth} mode={MODES[modeIndex]} version={version} machineInfo={launchDir} collapsed={messages.length > 0} smartShortcut={smartShortcut} />
+
+        {/* Messages scrollbox */}
         <scrollbox
           ref={scrollRef}
           stickyScroll
@@ -539,9 +553,6 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
             },
           }}
         >
-          {/* Banner - scrolls with chat */}
-          <WelcomeBanner width={mainWidth} mode={MODES[modeIndex]} version={version} machineInfo={launchDir} />
-
           {/* Messages */}
           <MessageList
             messages={messages}
@@ -638,7 +649,7 @@ export const App = ({ initialPrompt, version, launchDir }: AppProps) => {
       </box>
 
       {/* Sidebar - full height */}
-      <Sidebar width={sidebarWidth} smartShortcut={smartShortcut} isSchoolMode={modeIndex === SCHOOL_MODE_INDEX} />
+      <Sidebar width={sidebarWidth} isSchoolMode={modeIndex === SCHOOL_MODE_INDEX} />
     </box>
   )
 }
