@@ -100,11 +100,6 @@ export function useAppKeyboard({
   // Key intercept for input - handles Shift+M before input processes it
   const handleKeyIntercept = useCallback(
     (key: KeyEvent): boolean => {
-      // Debug: Log all Enter key presses
-      if (key.name === 'return' || key.name === 'enter') {
-        console.error('[DEBUG -1] Enter pressed, showCommands:', showCommands, 'showContext:', showContext, 'contextFocusPhase:', contextFocusPhase)
-      }
-
       // Let ConfigPanel handle its own keyboard events
       if (showConfigPanel) {
         return false // don't intercept, let ConfigPanel handle it
@@ -392,7 +387,7 @@ export function useAppKeyboard({
             if (setShowConfigPanel) setShowConfigPanel(true)
             return true
           }
-          if (cmd === '/init' || cmd === '/doctor' || cmd === '/login' ||
+          if (cmd === '/init' || cmd === '/doctor' ||
               cmd === '/logout' || cmd === '/add-dir' || cmd === '/agents') {
             // TODO: Implement these commands
             return true
