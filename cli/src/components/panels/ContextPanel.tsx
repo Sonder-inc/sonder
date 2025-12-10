@@ -4,7 +4,7 @@ import { searchContext } from '../../utils/trie'
 import { WorktreePanel } from './WorktreePanel'
 
 export type ContextFocusPhase = 'menu' | 'worktree'
-export type WorktreeAction = 'switch' | 'fork'
+export type WorktreeAction = 'switch' | 'fork' | 'delete'
 
 interface ContextPanelProps {
   inputValue: string

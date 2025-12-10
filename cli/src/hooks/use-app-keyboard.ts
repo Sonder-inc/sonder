@@ -91,11 +91,12 @@ export function useAppKeyboard({
   const switchThread = useThreadStore((state) => state.switchThread)
   const forkThread = useThreadStore((state) => state.forkThread)
   const compactThread = useThreadStore((state) => state.compactThread)
+  const deleteThread = useThreadStore((state) => state.deleteThread)
   const addMessageToThread = useThreadStore((state) => state.addMessageToThread)
   const currentThreadId = useThreadStore((state) => state.currentThreadId)
 
-  // Track what action triggered worktree open: 'switch' or 'fork'
-  const [worktreeAction, setWorktreeAction] = useState<'switch' | 'fork'>('switch')
+  // Track what action triggered worktree open: 'switch', 'fork', or 'delete'
+  const [worktreeAction, setWorktreeAction] = useState<'switch' | 'fork' | 'delete'>('switch')
 
   // Key intercept for input - handles Shift+M before input processes it
   const handleKeyIntercept = useCallback(
@@ -313,11 +314,33 @@ export function useAppKeyboard({
       }
       // Enter: select item from command menu or context menu
       if ((showCommands || showContext) && (key.name === 'return' || key.name === 'enter')) {
-        // If in worktree phase, handle based on action (switch or fork)
+        // If in worktree phase, handle based on action (switch, fork, or delete)
         if (showContext && contextFocusPhase === 'worktree' && worktreeNav.selectedThreadId) {
           if (worktreeAction === 'fork') {
             // Fork from selected thread
             forkThread(worktreeNav.selectedThreadId, '')
+          } else if (worktreeAction === 'delete') {
+            // Delete selected thread (don't delete current thread)
+            if (worktreeNav.selectedThreadId !== currentThreadId) {
+              deleteThread(worktreeNav.selectedThreadId)
+              if (addMessage) {
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'system',
+                  content: 'Thread deleted',
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              }
+            } else if (addMessage) {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: 'Cannot delete current thread',
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            }
           } else {
             // Switch to selected thread
             switchThread(worktreeNav.selectedThreadId)
@@ -346,6 +369,14 @@ export function useAppKeyboard({
           if (cmd === '*switch') {
             // Open worktree to navigate and switch to any block
             setWorktreeAction('switch')
+            setContextFocusPhase('worktree')
+            worktreeNav.initializeSelection()
+            // Don't clear input - keeps panel open
+            return true
+          }
+          if (cmd === '*delete') {
+            // Open worktree to select which thread to delete
+            setWorktreeAction('delete')
             setContextFocusPhase('worktree')
             worktreeNav.initializeSelection()
             // Don't clear input - keeps panel open
@@ -461,7 +492,7 @@ export function useAppKeyboard({
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, showConfigPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, modeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut, contextFocusPhase, worktreeNav, switchThread, forkThread, compactThread, addMessageToThread, addMessage, clearMessages, currentThreadId, worktreeAction],
+    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, showConfigPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, modeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut, contextFocusPhase, worktreeNav, switchThread, forkThread, compactThread, deleteThread, addMessageToThread, addMessage, clearMessages, currentThreadId, worktreeAction],
   )
 
   // Global keyboard handler for Ctrl+C, Ctrl+O, Escape, and backspace
