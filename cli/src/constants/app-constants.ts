@@ -15,6 +15,20 @@ export const MODEL_IDS: Record<ModelName, string> = {
 // Models that support thinking mode
 export const THINKING_CAPABLE_MODELS: ModelName[] = ['sonder', 'claude']
 
+// Models that use Claude Code headless instead of OpenRouter
+export const CLAUDE_CODE_MODELS: ModelName[] = ['claude']
+
+export function usesClaudeCode(model: ModelName): boolean {
+  return CLAUDE_CODE_MODELS.includes(model)
+}
+
+// Models that use Codex CLI headless instead of OpenRouter
+export const CODEX_MODELS: ModelName[] = ['codex']
+
+export function usesCodex(model: ModelName): boolean {
+  return CODEX_MODELS.includes(model)
+}
+
 // Context limits per model (keyed by API model ID)
 export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   'anthropic/claude-3.7-sonnet': 200_000,
@@ -57,7 +71,7 @@ export const COMMANDS: readonly Command[] = [
   { name: '/doctor', aliases: [], description: 'Diagnose and verify your installation and settings' },
   { name: '/exit', aliases: ['quit'], description: 'Exit the REPL' },
   { name: '/init', aliases: [], description: 'Initialize sonder in current directory' },
-  { name: '/login', aliases: ['logout'], description: 'Login or logout when already logged in' },
+  { name: '/logout', aliases: [], description: 'Logout from platform accounts' },
   { name: '/school', aliases: [], description: 'Hacking playground to rank up' },
   { name: '/feedback', aliases: [], description: 'Submit feedback or report a bug' },
 ]
@@ -70,6 +84,7 @@ export interface ContextItem {
 
 export const CONTEXT_ITEMS: readonly ContextItem[] = [
   { name: '*compact', label: 'compact' },
+  { name: '*delete', label: 'delete' },
   { name: '*fork', label: 'fork' },
   { name: '*switch', label: 'switch' },
 ]
