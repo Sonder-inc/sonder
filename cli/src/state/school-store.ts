@@ -35,7 +35,7 @@ interface SchoolStoreState {
   view: SchoolView
   selectedCategoryIndex: number
   selectedMachineIndex: number
-  expandedCategory: Cyber75Category | null
+  expandedCategory: Cyber75Category | 'all' | null
 
   // Progress (persisted)
   progress: Record<string, BoxProgress>
@@ -61,8 +61,13 @@ interface SchoolStoreActions {
   navigateDown: () => void
   navigateLeft: () => void
   navigateRight: () => void
+  // Panel-specific navigation (for lazygit-style panel focus)
+  navigateTopicUp: () => void
+  navigateTopicDown: () => void
+  navigateMachineUp: () => void
+  navigateMachineDown: () => void
   selectCurrent: () => Cyber75Box | null
-  expandCategory: (category: Cyber75Category) => void
+  expandCategory: (category: Cyber75Category | 'all') => void
   collapseCategory: () => void
 
   // Progress
@@ -99,7 +104,7 @@ const initialState: SchoolStoreState = {
   view: 'categories',
   selectedCategoryIndex: 0,
   selectedMachineIndex: 0,
-  expandedCategory: null,
+  expandedCategory: 'all', // Auto-expand "all" by default
   progress: {},
   activeBoxId: null,
   activeBoxIp: null,
@@ -126,6 +131,14 @@ export const useSchoolStore = create<SchoolStore>()(
         set((state) => {
           if (state.view === 'categories') {
             state.selectedCategoryIndex = Math.max(0, state.selectedCategoryIndex - 1)
+            // Auto-expand selected category
+            if (state.selectedCategoryIndex === 0) {
+              state.expandedCategory = 'all'
+            } else {
+              const cat = CATEGORIES[state.selectedCategoryIndex - 1]
+              state.expandedCategory = cat?.id || null
+            }
+            state.selectedMachineIndex = 0
           } else if (state.view === 'machines') {
             state.selectedMachineIndex = Math.max(0, state.selectedMachineIndex - 1)
           }
@@ -134,8 +147,17 @@ export const useSchoolStore = create<SchoolStore>()(
       navigateDown: () =>
         set((state) => {
           if (state.view === 'categories') {
-            const maxIndex = CATEGORIES.length - 1
+            // +1 for "all" at index 0
+            const maxIndex = CATEGORIES.length
             state.selectedCategoryIndex = Math.min(maxIndex, state.selectedCategoryIndex + 1)
+            // Auto-expand selected category
+            if (state.selectedCategoryIndex === 0) {
+              state.expandedCategory = 'all'
+            } else {
+              const cat = CATEGORIES[state.selectedCategoryIndex - 1]
+              state.expandedCategory = cat?.id || null
+            }
+            state.selectedMachineIndex = 0
           } else if (state.view === 'machines') {
             const machines = get().getVisibleMachines()
             const maxIndex = machines.length - 1
@@ -155,24 +177,71 @@ export const useSchoolStore = create<SchoolStore>()(
       navigateRight: () => {
         const state = get()
         if (state.view === 'categories') {
-          const category = CATEGORIES[state.selectedCategoryIndex]
-          if (category) {
+          // Index 0 = "all", rest are CATEGORIES[index - 1]
+          if (state.selectedCategoryIndex === 0) {
             set((s) => {
               s.view = 'machines'
-              s.expandedCategory = category.id
+              s.expandedCategory = 'all'
               s.selectedMachineIndex = 0
             })
+          } else {
+            const category = CATEGORIES[state.selectedCategoryIndex - 1]
+            if (category) {
+              set((s) => {
+                s.view = 'machines'
+                s.expandedCategory = category.id
+                s.selectedMachineIndex = 0
+              })
+            }
           }
         }
       },
 
+      // Panel-specific navigation (independent of view state)
+      navigateTopicUp: () =>
+        set((state) => {
+          state.selectedCategoryIndex = Math.max(0, state.selectedCategoryIndex - 1)
+          // Auto-expand selected category
+          if (state.selectedCategoryIndex === 0) {
+            state.expandedCategory = 'all'
+          } else {
+            const cat = CATEGORIES[state.selectedCategoryIndex - 1]
+            state.expandedCategory = cat?.id || null
+          }
+          state.selectedMachineIndex = 0
+        }),
+
+      navigateTopicDown: () =>
+        set((state) => {
+          const maxIndex = CATEGORIES.length
+          state.selectedCategoryIndex = Math.min(maxIndex, state.selectedCategoryIndex + 1)
+          // Auto-expand selected category
+          if (state.selectedCategoryIndex === 0) {
+            state.expandedCategory = 'all'
+          } else {
+            const cat = CATEGORIES[state.selectedCategoryIndex - 1]
+            state.expandedCategory = cat?.id || null
+          }
+          state.selectedMachineIndex = 0
+        }),
+
+      navigateMachineUp: () =>
+        set((state) => {
+          state.selectedMachineIndex = Math.max(0, state.selectedMachineIndex - 1)
+        }),
+
+      navigateMachineDown: () => {
+        const machines = get().getVisibleMachines()
+        set((state) => {
+          const maxIndex = machines.length - 1
+          state.selectedMachineIndex = Math.min(maxIndex, state.selectedMachineIndex + 1)
+        })
+      },
+
       selectCurrent: () => {
         const state = get()
-        if (state.view === 'machines') {
-          const machines = state.getVisibleMachines()
-          return machines[state.selectedMachineIndex] || null
-        }
-        return null
+        const machines = state.getVisibleMachines()
+        return machines[state.selectedMachineIndex] || null
       },
 
       expandCategory: (category) =>
@@ -285,7 +354,9 @@ export const useSchoolStore = create<SchoolStore>()(
         const state = get()
         if (!state.expandedCategory) return []
 
-        let machines = getBoxesByCategory(state.expandedCategory)
+        let machines = state.expandedCategory === 'all'
+          ? [...CYBER75]
+          : getBoxesByCategory(state.expandedCategory)
 
         // Apply platform filter
         if (state.platformFilter !== 'all') {

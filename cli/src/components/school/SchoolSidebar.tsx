@@ -198,7 +198,7 @@ interface MachineListViewProps {
   width: number
   contentWidth: number
   theme: ReturnType<typeof useTheme>
-  expandedCategory: Cyber75Category
+  expandedCategory: Cyber75Category | 'all'
   machines: Cyber75Box[]
   selectedIndex: number
   progress: Record<string, { user: boolean; root: boolean }>
@@ -217,8 +217,10 @@ function MachineListView({
   focused,
   getCategoryProgress,
 }: MachineListViewProps) {
-  const category = CATEGORIES.find((c) => c.id === expandedCategory)
-  const catProgress = getCategoryProgress(expandedCategory)
+  const category = expandedCategory === 'all' ? null : CATEGORIES.find((c) => c.id === expandedCategory)
+  const catProgress = expandedCategory === 'all'
+    ? { completed: machines.filter(m => progress[m.id]?.root).length, total: machines.length }
+    : getCategoryProgress(expandedCategory)
 
   const truncate = (text: string, maxLen: number) => {
     if (text.length <= maxLen) return text
@@ -288,7 +290,7 @@ function MachineListView({
       >
         <text>
           <span style={{ fg: theme.muted }}>◂ </span>
-          <span style={{ fg: theme.accent }}>{category?.shortName || 'Machines'}</span>
+          <span style={{ fg: theme.accent }}>{category?.shortName || (expandedCategory === 'all' ? 'All' : 'Machines')}</span>
         </text>
         <text style={{ fg: theme.muted }}>
           {catProgress.completed}/{catProgress.total}
