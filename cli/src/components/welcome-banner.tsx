@@ -1,5 +1,6 @@
 import { useTheme } from '../hooks/use-theme'
 import { getUserTierInfo } from '../utils/auth'
+import { useAuthStore } from '../state/auth-store'
 
 const SONDER_LOGO = [
   '▐▛███▜▌',
@@ -13,6 +14,8 @@ interface WelcomeBannerProps {
   machineInfo: string
   modelInfo?: string
   mode?: string
+  collapsed?: boolean
+  smartShortcut?: string | null
 }
 
 export const WelcomeBanner = ({
@@ -21,14 +24,51 @@ export const WelcomeBanner = ({
   machineInfo,
   modelInfo,
   mode = 'stealth',
+  collapsed = false,
+  smartShortcut,
 }: WelcomeBannerProps) => {
   const theme = useTheme()
+  const isDevMode = useAuthStore((state) => state.isDevMode)
 
   // Get tier info - shows 'unknown' if not logged in
   const tierInfo = getUserTierInfo()
   const displayTier = modelInfo ?? (tierInfo.isLoggedIn ? `${tierInfo.tier}` : 'unknown')
   const isSchoolMode = mode === 'school'
   const borderFg = isSchoolMode ? theme.accent : theme.borderColor
+
+  // Collapsed thin banner - 5 lines tall with full logo
+  if (collapsed) {
+    return (
+      <box style={{ flexDirection: 'row', marginLeft: 1, marginTop: 1, marginBottom: 1 }}>
+        <box style={{ flexDirection: 'column' }}>
+          <text> </text>
+          <text style={{ fg: theme.accent }}>{SONDER_LOGO[0]}</text>
+          <text style={{ fg: theme.accent }}>{SONDER_LOGO[1]}</text>
+          <text style={{ fg: theme.accent }}>{SONDER_LOGO[2]}</text>
+          <text> </text>
+        </box>
+        <box style={{ flexDirection: 'column', marginLeft: 1 }}>
+          <text> </text>
+          <text>
+            <span fg={theme.foreground}>Sonder</span><span fg={theme.muted}> v{version}</span>
+            {isDevMode && (
+              <span fg="#facc15"> [DEV]</span>
+            )}
+            {smartShortcut && (
+              <>
+                <span fg={theme.borderColor}> ─ </span>
+                <span fg="#facc15">{'>|'}</span>
+                <span fg={theme.muted}> {smartShortcut}</span>
+              </>
+            )}
+          </text>
+          <text style={{ fg: theme.muted }}>{displayTier}</text>
+          <text style={{ fg: theme.muted }}>{machineInfo}</text>
+          <text> </text>
+        </box>
+      </box>
+    )
+  }
 
   // Layout calculations
   const bannerWidth = width
@@ -39,7 +79,7 @@ export const WelcomeBanner = ({
   const rightPanelWidth = innerWidth - leftPanelWidth - 1 // -1 for divider
 
   // Title positioned on top border (left offset)
-  const versionText = ` Sonder v${version} `
+  const versionText = ` Sonder v${version}${isDevMode ? ' [DEV]' : ''} `
   const dashesBeforeTitle = 1
   const dashesAfterTitle = innerWidth - dashesBeforeTitle - versionText.length
 
