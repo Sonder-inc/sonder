@@ -2,6 +2,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { streamText, generateText } from 'ai'
 import type { CoreMessage } from 'ai'
 import { getAvailableTools } from '../tools'
+import { getEffectiveOpenRouterKey } from '../utils/api-keys'
 
 export type Message = CoreMessage
 
@@ -59,7 +60,7 @@ Conversation:
 `
 
 export async function getFlavorWord(userMessage: string): Promise<string | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY
+  const apiKey = getEffectiveOpenRouterKey()
   if (!apiKey) {
     return FALLBACK_WORDS[Math.floor(Math.random() * FALLBACK_WORDS.length)]
   }
@@ -88,7 +89,7 @@ export async function getFlavorWord(userMessage: string): Promise<string | null>
 }
 
 export async function generateConversationSummary(conversationText: string): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY
+  const apiKey = getEffectiveOpenRouterKey()
   if (!apiKey) return 'Conversation summary'
 
   try {
@@ -111,7 +112,7 @@ export async function generateConversationSummary(conversationText: string): Pro
 }
 
 export async function getSmartShortcut(conversationSummary: string): Promise<string | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY
+  const apiKey = getEffectiveOpenRouterKey()
   if (!apiKey) return null
 
   try {
@@ -153,8 +154,8 @@ export async function streamChat(
   abortSignal?: AbortSignal,
   useTools: boolean = true,
 ): Promise<StreamResult> {
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set')
+  const apiKey = getEffectiveOpenRouterKey()
+  if (!apiKey) throw new Error('No API key available. Please provide an OpenRouter API key.')
 
   // For thinking models, OpenRouter calculates budget as 80% of maxTokens
   const isThinkingModel = model.includes(':thinking')

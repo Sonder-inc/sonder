@@ -4,6 +4,8 @@
  * Centralized access to API keys with validation.
  */
 
+import { useAuthStore } from '../state/auth-store'
+
 export type ApiKeyName = 'OPENROUTER_API_KEY' | 'ANTHROPIC_API_KEY' | 'OPENAI_API_KEY'
 
 /**
@@ -36,6 +38,20 @@ export function hasApiKey(name: ApiKeyName): boolean {
  * Get the OpenRouter API key (most commonly used)
  */
 export function getOpenRouterKey(): string | null {
+  return getApiKey('OPENROUTER_API_KEY')
+}
+
+/**
+ * Get effective OpenRouter API key - checks auth store first, then env var.
+ * This allows BYOK (Bring Your Own Key) to work with the auth flow.
+ */
+export function getEffectiveOpenRouterKey(): string | null {
+  // Check auth store first (BYOK flow)
+  const storeKey = useAuthStore.getState().apiKey
+  if (storeKey && storeKey !== 'test') {
+    return storeKey
+  }
+  // Fall back to environment variable
   return getApiKey('OPENROUTER_API_KEY')
 }
 
