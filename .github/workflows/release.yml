@@ -66,8 +66,11 @@ jobs:
       - name: Get current version
         id: version
         run: |
-          # Get latest tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+          # Get latest tag by version sort (handles multiple tags on same commit)
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.1.0"
+          fi
           echo "Latest tag: $LATEST_TAG"
 
           # Extract version parts
