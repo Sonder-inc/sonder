@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useKeyboard } from '@opentui/react'
-import type { KeyEvent } from '@opentui/core'
+import type { KeyEvent, PasteEvent } from '@opentui/core'
 import { useTheme } from '../hooks/use-theme'
 import { useTerminalDimensions } from '../hooks/use-terminal-dimensions'
 import { useAuthStore } from '../state/auth-store'
@@ -130,6 +130,21 @@ export const LoginPage = () => {
   // Animated donut
   const donutFrame = useDonutAnimation()
 
+  // Handle paste events
+  const handlePaste = useCallback((event: PasteEvent) => {
+    if (selectedOption !== 1) return
+
+    const text = event.text ?? ''
+    if (!text) return
+
+    setKeyValue((prev) => prev + text)
+    // Clear error when user pastes
+    if (validationState === 'error') {
+      setValidationState('idle')
+      setErrorMessage('')
+    }
+  }, [selectedOption, validationState])
+
   // Handle API key submission with validation
   const handleKeySubmit = useCallback(async () => {
     const key = keyValue.trim()
@@ -182,7 +197,11 @@ export const LoginPage = () => {
               setErrorMessage('')
             }
             return
-          } else if (key.sequence && key.sequence.length === 1 && !key.ctrl && !key.meta) {
+          } else if ((key.meta || key.ctrl) && (key.name === 'v' || key.sequence === 'v')) {
+            // Cmd+V (macOS) or Ctrl+V (Linux/Windows) - paste will be handled by onPaste event
+            return
+          } else if (key.sequence && !key.ctrl && !key.meta) {
+            // Accept both single characters and pastes (multi-character sequences)
             setKeyValue((prev) => prev + key.sequence)
             // Clear error when user starts editing
             if (validationState === 'error') {
@@ -216,7 +235,28 @@ export const LoginPage = () => {
   const paddingTop = Math.max(2, Math.floor((terminalHeight - contentHeight) / 2))
 
   return (
-    <box style={{ flexDirection: 'column', flexGrow: 1, paddingTop, paddingLeft: 4 }}>
+    <scrollbox
+      scrollX={false}
+      scrollY={false}
+      scrollbarOptions={{ visible: false }}
+      onPaste={handlePaste}
+      style={{
+        flexGrow: 1,
+        rootOptions: {
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'transparent',
+        },
+        wrapperOptions: {
+          paddingLeft: 4,
+          paddingTop,
+          border: false,
+        },
+        contentOptions: {
+          flexDirection: 'column',
+        },
+      }}
+    >
       <box style={{ flexDirection: 'row', gap: 4 }}>
         {/* Left: Animated donut */}
         <box style={{ flexDirection: 'column', width: DONUT_WIDTH }}>
@@ -272,6 +312,6 @@ export const LoginPage = () => {
           )}
         </box>
       </box>
-    </box>
+    </scrollbox>
   )
 }

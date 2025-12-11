@@ -56,6 +56,9 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
   const [showStatusPanel, setShowStatusPanel] = useState(false)
   const [showConfigPanel, setShowConfigPanel] = useState(false)
 
+  // Auth logout
+  const logout = useAuthStore((state) => state.logout)
+
   // Thread store - load on mount
   const loadThreads = useThreadStore((state) => state.loadThreads)
   const threadsLoaded = useThreadStore((state) => state.loaded)
@@ -487,8 +490,12 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
           return
         }
 
-        case '/doctor':
         case '/logout':
+          logout()
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
+        case '/doctor':
         case '/add-dir':
         case '/agents':
           // TODO: Implement these commands
@@ -499,7 +506,7 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
 
     handleSendMessage(trimmed)
     setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel, setShowConfigPanel, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode, setQuestionWizard, submitFlag, isSchoolActive, schoolStore])
+  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel, setShowConfigPanel, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode, setQuestionWizard, submitFlag, isSchoolActive, schoolStore, logout])
 
   useEffect(() => {
     if (initialPrompt && messages.length === 0) {

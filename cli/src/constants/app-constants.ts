@@ -4,7 +4,7 @@ export type ModelName = (typeof MODELS)[number]
 // Base model IDs (without thinking suffix)
 // See https://openrouter.ai/models for valid IDs
 export const MODEL_IDS: Record<ModelName, string> = {
-  sonder: 'anthropic/claude-3.7-sonnet',
+  sonder: 'deepseek/deepseek-v3.2-speciale',
   claude: 'anthropic/claude-3.7-sonnet',
   gemini: 'google/gemini-2.0-flash-001',
   codex: 'openai/gpt-4o',
@@ -13,7 +13,7 @@ export const MODEL_IDS: Record<ModelName, string> = {
 }
 
 // Models that support thinking mode
-export const THINKING_CAPABLE_MODELS: ModelName[] = ['sonder', 'claude']
+export const THINKING_CAPABLE_MODELS: ModelName[] = ['claude']
 
 // Models that use Claude Code headless instead of OpenRouter
 export const CLAUDE_CODE_MODELS: ModelName[] = ['claude']
@@ -37,6 +37,7 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   'openai/gpt-4o-mini': 128_000,
   'openai/gpt-4-turbo': 128_000,
   'google/gemini-2.0-flash-001': 1_000_000,
+  'deepseek/deepseek-v3.2-speciale': 64_000,
 }
 
 export const DEFAULT_CONTEXT_LIMIT = 200_000
