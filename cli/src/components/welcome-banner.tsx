@@ -62,7 +62,7 @@ export const WelcomeBanner = ({
         <box style={{ flexDirection: 'column', marginLeft: 1 }}>
           <text> </text>
           <text>
-            <span fg={theme.foreground}>Sonder</span><span fg={theme.muted}> v{version}</span>
+            <span fg={theme.foreground}>Sonder</span><span fg={theme.muted}> {version}</span>
             {isDevMode && (
               <span fg="#facc15"> [DEV]</span>
             )}
@@ -99,7 +99,7 @@ export const WelcomeBanner = ({
   const rightPanelWidth = innerWidth - leftPanelWidth - 1 // -1 for divider
 
   // Title positioned on top border (left offset)
-  const versionText = ` Sonder v${version}${isDevMode ? ' [DEV]' : ''} `
+  const versionText = ` Sonder ${version}${isDevMode ? ' [DEV]' : ''} `
   const dashesBeforeTitle = 1
   const dashesAfterTitle = innerWidth - dashesBeforeTitle - versionText.length
 
