@@ -379,11 +379,8 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
         </box>
         <text style={{ fg: theme.muted }}>Resets Dec 15 at 3:59pm (America/Toronto)</text>
 
-        {/* Extra usage */}
-        <text style={{ fg: theme.foreground, marginTop: 1 }}>Extra usage</text>
-        <text style={{ fg: theme.muted }}>Extra usage not enabled • /extra-usage to enable</text>
-
-        <text style={{ fg: theme.muted, marginTop: 1 }}>Esc to cancel</text>
+        <text style={{ fg: theme.muted, marginTop: 1 }}>Extra usage not enabled • /extra-usage to enable</text>
+        <text style={{ fg: theme.muted }}>Esc to cancel</text>
       </box>
     )
   }
