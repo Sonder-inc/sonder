@@ -37,6 +37,20 @@ function loadPackageVersion(): string {
     return process.env.SONDER_CLI_VERSION
   }
 
+  // Check installed version file first (updated by auto-updater)
+  try {
+    const { existsSync, readFileSync } = require('fs')
+    const { homedir } = require('os')
+    const { join } = require('path')
+    const versionFile = join(process.env.SONDER_INSTALL_DIR || join(homedir(), '.sonder'), 'version')
+    if (existsSync(versionFile)) {
+      const version = readFileSync(versionFile, 'utf-8').trim()
+      if (version) return version
+    }
+  } catch {
+    // Continue to package.json fallback
+  }
+
   try {
     const pkg = require('../package.json') as { version?: string }
     if (pkg.version) {
