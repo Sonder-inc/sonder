@@ -3,6 +3,7 @@ import { streamText, generateText } from 'ai'
 import type { CoreMessage } from 'ai'
 import { getAvailableTools } from '../tools'
 import { getEffectiveOpenRouterKey } from '../utils/api-keys'
+import { spawn } from 'child_process'
 
 export type Message = CoreMessage
 
@@ -59,22 +60,46 @@ Examples:
 Conversation:
 `
 
-export async function getFlavorWord(userMessage: string): Promise<string | null> {
-  const apiKey = getEffectiveOpenRouterKey()
-  if (!apiKey) {
-    return FALLBACK_WORDS[Math.floor(Math.random() * FALLBACK_WORDS.length)]
-  }
-
-  try {
-    const openrouter = createOpenRouter({ apiKey })
-
-    const result = await generateText({
-      model: openrouter('anthropic/claude-3.5-haiku'),
-      prompt: FLAVOR_PROMPT + userMessage,
+/**
+ * Execute Claude Code CLI with a prompt and return the response
+ */
+async function executeClaudeCLI(prompt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const process = spawn('claude', ['-p', prompt, '--model', 'haiku'], {
+      stdio: ['inherit', 'pipe', 'pipe'],
     })
 
+    let stdout = ''
+    let stderr = ''
+
+    process.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+
+    process.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    process.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`))
+      } else {
+        resolve(stdout.trim())
+      }
+    })
+
+    process.on('error', (err) => {
+      reject(err)
+    })
+  })
+}
+
+export async function getFlavorWord(userMessage: string): Promise<string | null> {
+  try {
+    const result = await executeClaudeCLI(FLAVOR_PROMPT + userMessage)
+
     // Clean up the response - just get the first word ending in -ing
-    const text = result.text.trim()
+    const text = result.trim()
     const match = text.match(/[A-Z][a-z]*ing/)?.[0]
     if (match) return match
 
