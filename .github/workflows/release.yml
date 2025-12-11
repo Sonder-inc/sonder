@@ -13,9 +13,6 @@ jobs:
           - os: macos-14        # M1/M2/M3 runner
             target: bun-darwin-arm64
             name: darwin-arm64
-          - os: macos-13        # Intel runner
-            target: bun-darwin-x64
-            name: darwin-x64
           - os: ubuntu-latest
             target: bun-linux-x64
             name: linux-x64
@@ -97,7 +94,6 @@ jobs:
         run: |
           mkdir -p release
           cp artifacts/sonder-darwin-arm64/sonder-darwin-arm64.tar.gz release/
-          cp artifacts/sonder-darwin-x64/sonder-darwin-x64.tar.gz release/
           cp artifacts/sonder-linux-x64/sonder-linux-x64.tar.gz release/
           cp artifacts/sonder-linux-arm64/sonder-linux-arm64.tar.gz release/
           ls -la release/
