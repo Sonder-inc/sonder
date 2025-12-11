@@ -119,8 +119,8 @@ export function useChatHandler({
       setStreamingMessageId(aiMessageId)
       const abortController = startStreaming()
 
-      // Fetch flavor word asynchronously
-      fetchFlavorWord(content)
+      // Fetch flavor word FIRST (before model starts) - acts as thinking indicator
+      await fetchFlavorWord(content)
 
       let currentMessageId = aiMessageId
 

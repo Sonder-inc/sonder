@@ -4,7 +4,7 @@ export type ModelName = (typeof MODELS)[number]
 // Base model IDs (without thinking suffix)
 // See https://openrouter.ai/models for valid IDs
 export const MODEL_IDS: Record<ModelName, string> = {
-  sonder: 'deepseek/deepseek-v3.2-speciale',
+  sonder: 'deepseek/deepseek-v3.2', // Standard V3.2 with full tool support
   claude: 'anthropic/claude-3.7-sonnet',
   gemini: 'google/gemini-2.0-flash-001',
   codex: 'openai/gpt-4o',
@@ -37,7 +37,7 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   'openai/gpt-4o-mini': 128_000,
   'openai/gpt-4-turbo': 128_000,
   'google/gemini-2.0-flash-001': 1_000_000,
-  'deepseek/deepseek-v3.2-speciale': 64_000,
+  'deepseek/deepseek-v3.2': 64_000,
 }
 
 export const DEFAULT_CONTEXT_LIMIT = 200_000
@@ -64,16 +64,21 @@ export interface Command {
 }
 
 export const COMMANDS: readonly Command[] = [
-  { name: '/add-dir', aliases: [], description: 'Add a new working directory' },
   { name: '/agents', aliases: [], description: 'Manage agent configurations' },
   { name: '/clear', aliases: ['reset', 'new'], description: 'Start fresh conversation (new thread, no history)' },
-  { name: '/config', aliases: ['theme'], description: 'Open config panel' },
-  { name: '/context', aliases: ['status'], description: 'Show context usage, extensions, and session info' },
+  { name: '/config', aliases: ['theme'], description: 'Open settings panel (Config tab)' },
+  { name: '/context', aliases: ['status'], description: 'Open settings panel (Context tab)' },
+  { name: '/cred', aliases: [], description: 'Add credential to hacking session' },
   { name: '/doctor', aliases: [], description: 'Diagnose and verify your installation and settings' },
   { name: '/exit', aliases: ['quit'], description: 'Exit the REPL' },
+  { name: '/flag', aliases: [], description: 'Mark flag as collected (user/root)' },
   { name: '/init', aliases: [], description: 'Initialize sonder in current directory' },
   { name: '/logout', aliases: [], description: 'Logout from platform accounts' },
+  { name: '/recon', aliases: [], description: 'Add recon finding to hacking session' },
   { name: '/school', aliases: [], description: 'Hacking playground to rank up' },
+  { name: '/status', aliases: [], description: 'Open settings panel (Status tab)' },
+  { name: '/target', aliases: [], description: 'Set current target for hacking session' },
+  { name: '/usage', aliases: [], description: 'Open settings panel (Usage tab)' },
   { name: '/feedback', aliases: [], description: 'Submit feedback or report a bug' },
 ]
 

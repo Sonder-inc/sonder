@@ -16,9 +16,6 @@ import type { Machine } from '../types/platform'
 
 export type SchoolModePhase =
   | 'idle'
-  | 'auth_check'
-  | 'auth_prompt'
-  | 'authenticating'
   | 'vpn_connecting'
   | 'machine_select'
   | 'spawning'
@@ -57,8 +54,6 @@ export function useSchoolMode(): UseSchoolModeReturn {
   } = usePlatformStore()
 
   const enterSchoolMode = useCallback(async () => {
-    setState({ phase: 'auth_check', vpnConnected: false })
-
     // Initialize platform manager
     await platformManager.init()
 
@@ -66,8 +61,12 @@ export function useSchoolMode(): UseSchoolModeReturn {
     const authedPlatforms = platformManager.getAuthenticatedPlatforms()
 
     if (authedPlatforms.length === 0) {
-      // Need to auth - prompt user to choose platform
-      setState({ phase: 'auth_prompt', vpnConnected: false })
+      // Show error - authentication should be handled at login
+      setState({
+        phase: 'error',
+        error: 'Please authenticate with HackTheBox or TryHackMe first',
+        vpnConnected: false,
+      })
       return
     }
 
@@ -105,29 +104,16 @@ export function useSchoolMode(): UseSchoolModeReturn {
   }, [setActiveMachine])
 
   const selectPlatform = useCallback(async (platform: 'htb' | 'thm') => {
+    // Assume platform is already authenticated (handled at login)
     const isAuthed = platformManager.isAuthenticated(platform)
 
     if (!isAuthed) {
-      setState({ phase: 'authenticating', platform, vpnConnected: false })
-
-      const result = await platformManager.authenticate(platform)
-
-      if (!result.success) {
-        setState({
-          phase: 'error',
-          error: result.error || 'Authentication failed',
-          vpnConnected: false,
-        })
-        return
-      }
-
-      // Get user info
-      const userInfo = await platformManager.getPlatform(platform).getCurrentUser()
-      setUser({
-        id: userInfo.id,
-        name: userInfo.username,
-        email: userInfo.email || '',
+      setState({
+        phase: 'error',
+        error: `Please authenticate with ${platform.toUpperCase()} first`,
+        vpnConnected: false,
       })
+      return
     }
 
     // Connect VPN
@@ -152,7 +138,7 @@ export function useSchoolMode(): UseSchoolModeReturn {
       platform,
       vpnConnected: true,
     })
-  }, [setUser])
+  }, [])
 
   const selectMachine = useCallback(async (machine: Machine) => {
     const platform = machine.platform as 'htb' | 'thm'

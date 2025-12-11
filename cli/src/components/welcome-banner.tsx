@@ -1,6 +1,7 @@
 import { useTheme } from '../hooks/use-theme'
-import { getUserTierInfo } from '../utils/auth'
+import { getUserTierInfo, getUserCredentials } from '../utils/auth'
 import { useAuthStore } from '../state/auth-store'
+import { useSchoolStore } from '../state/school-store'
 
 const SONDER_LOGO = [
   '▐▛███▜▌',
@@ -29,6 +30,17 @@ export const WelcomeBanner = ({
 }: WelcomeBannerProps) => {
   const theme = useTheme()
   const isDevMode = useAuthStore((state) => state.isDevMode)
+  const { progress, getTotalProgress } = useSchoolStore()
+
+  // Get user info
+  const user = getUserCredentials()
+  const username = user?.name || 'unknown'
+
+  // Get stats
+  const totalProgress = getTotalProgress()
+  const xp = totalProgress.completed * 100
+  const owned = Object.values(progress).filter(p => p.root).length
+  const streak = owned > 0 ? Math.min(owned, 7) : 0
 
   // Get tier info - shows 'unknown' if not logged in
   const tierInfo = getUserTierInfo()
@@ -62,7 +74,15 @@ export const WelcomeBanner = ({
               </>
             )}
           </text>
-          <text style={{ fg: theme.muted }}>{displayTier}</text>
+          <text>
+            <span fg={theme.foreground}>{username}</span>
+            <span fg={theme.muted}> </span>
+            <span fg={theme.accent}>{xp}</span>
+            <span fg={theme.muted}> </span>
+            <span fg={theme.success}>{owned}</span>
+            <span fg={theme.muted}> </span>
+            <span fg={theme.warning}>{streak}</span>
+          </text>
           <text style={{ fg: theme.muted }}>{machineInfo}</text>
           <text> </text>
         </box>

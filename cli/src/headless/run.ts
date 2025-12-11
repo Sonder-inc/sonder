@@ -7,7 +7,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { streamChat, type Message, type ToolCallRequest } from '../services/openrouter'
 import { executeTool } from '../tools/registry'
-import { MODEL_IDS } from '../constants/app-constants'
+import { MODEL_IDS, type ModelName } from '../constants/app-constants'
 import type { HeadlessConfig } from '../config/scope'
 
 export interface ToolCallRecord {
@@ -62,7 +62,17 @@ export async function runHeadless(config: HeadlessConfig): Promise<HeadlessResul
   const startTime = Date.now()
   const toolCallRecords: ToolCallRecord[] = []
 
-  const model = config.model || MODEL_IDS.sonder
+  // Resolve model name to actual API model ID
+  let model = MODEL_IDS.sonder // Default
+  if (config.model) {
+    // Check if it's a known model name (e.g., 'sonder', 'claude', 'gemini')
+    if (config.model in MODEL_IDS) {
+      model = MODEL_IDS[config.model as ModelName]
+    } else {
+      // Assume it's already a full model ID (e.g., 'anthropic/claude-3.7-sonnet')
+      model = config.model
+    }
+  }
   const timeout = config.timeout || 300000 // 5 min default
 
   // Setup abort controller for timeout

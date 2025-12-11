@@ -21,14 +21,11 @@ export interface StreamResult {
   totalTokens: number
 }
 
-const FLAVOR_PROMPT = `Reply with ONE word only - a fun gerund (verb ending in -ing) that relates to this message. Be creative and whimsical. Capitalize first letter. No punctuation. Avoid alarming/destructive words.
+const FLAVOR_PROMPT = `Analyze this message and come up with a single positive, cheerful and delightful verb in gerund form that's related to the message. Only include the word with no other text or punctuation. The word should have the first letter capitalized. Add some whimsy and surprise to entertain the user. Ensure the word is highly relevant to the user's message. Synonyms are welcome, including obscure words. Be careful to avoid words that might look alarming or concerning to the software engineer seeing it as a status notification, such as Connecting, Disconnecting, Retrying, Lagging, Freezing, etc. NEVER use a destructive word, such as Terminating, Killing, Deleting, Destroying, Stopping, Exiting, or similar. NEVER use a word that may be derogatory, offensive
 
 Message: `
 
-const FALLBACK_WORDS = [
-  'Pondering', 'Conjuring', 'Brewing', 'Crafting', 'Weaving',
-  'Dreaming', 'Exploring', 'Discovering', 'Imagining', 'Creating',
-]
+// Removed fallback words - if Claude CLI fails, show nothing
 
 const SUMMARY_PROMPT = `Summarize this conversation in ONE concise sentence (max 60 chars). Focus on the main task/goal accomplished. Use action verbs. No quotes or punctuation at end.
 
@@ -107,9 +104,12 @@ export async function getFlavorWord(userMessage: string): Promise<string | null>
     const word = text.split(/\s+/)[0]?.replace(/[^a-zA-Z]/g, '')
     if (word && word.length > 2) return word
 
-    return FALLBACK_WORDS[Math.floor(Math.random() * FALLBACK_WORDS.length)]
-  } catch {
-    return FALLBACK_WORDS[Math.floor(Math.random() * FALLBACK_WORDS.length)]
+    // No valid word generated, return null (no fallback)
+    return null
+  } catch (err) {
+    console.error('[FlavorWord] Error generating:', err)
+    // Don't use fallback words, just return null to hide status
+    return null
   }
 }
 
