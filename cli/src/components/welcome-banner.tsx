@@ -2,6 +2,9 @@ import { useTheme } from '../hooks/use-theme'
 import { getUserTierInfo, getUserCredentials } from '../utils/auth'
 import { useAuthStore } from '../state/auth-store'
 import { useSchoolStore } from '../state/school-store'
+import { useThreadStore } from '../state/thread-store'
+import { getTimeAgo, getRecentThreads } from '../services/thread-persistence'
+import type { Thread } from '../types/thread'
 
 const SONDER_LOGO = [
   '▐▛███▜▌',
@@ -31,6 +34,9 @@ export const WelcomeBanner = ({
   const theme = useTheme()
   const isDevMode = useAuthStore((state) => state.isDevMode)
   const { progress, getTotalProgress } = useSchoolStore()
+  const threads = useThreadStore((state) => state.threads)
+  const loaded = useThreadStore((state) => state.loaded)
+  const recentThreads = loaded ? getRecentThreads(threads, 3) : []
 
   // Get user info
   const user = getUserCredentials()
@@ -47,6 +53,20 @@ export const WelcomeBanner = ({
   const displayTier = modelInfo ?? (tierInfo.isLoggedIn ? `${tierInfo.tier}` : 'unknown')
   const isSchoolMode = mode === 'school'
   const borderFg = isSchoolMode ? theme.accent : theme.borderColor
+
+  // Helper to format thread for display
+  const formatThreadForBanner = (thread: Thread): string => {
+    if (!thread || !thread.title) return 'Invalid thread'
+    
+    const typeIndicator = thread.type === 'root' ? '[I]' : 
+                        thread.type === 'fork' ? '[F]' : 
+                        thread.type === 'compact' ? '[C]' : '[?]'
+    
+    const timeAgo = thread.lastActivityAt ? getTimeAgo(thread.lastActivityAt) : 'Unknown time'
+    const title = thread.title.length > 15 ? thread.title.slice(0, 12) + '...' : thread.title
+    
+    return `${typeIndicator} ${title} (${timeAgo})`
+  }
 
   // Collapsed thin banner - 5 lines tall with full logo
   if (collapsed) {
@@ -125,6 +145,17 @@ export const WelcomeBanner = ({
     return { left, right }
   }
 
+  // Prepare recent activity rows (one per thread, truncated to fit)
+  const maxActivityLen = rightPanelWidth - 3 // padding
+  const truncateActivity = (text: string) =>
+    text.length > maxActivityLen ? text.slice(0, maxActivityLen - 3) + '...' : text
+
+  const activityRows = !loaded
+    ? [truncateActivity('Loading...')]
+    : !recentThreads || recentThreads.length === 0
+      ? [truncateActivity('No recent sessions')]
+      : recentThreads.slice(0, 3).map(thread => truncateActivity(formatThreadForBanner(thread)))
+
   // Define all rows
   const rows = [
     buildRow('', ''),                                    // empty top padding
@@ -132,9 +163,9 @@ export const WelcomeBanner = ({
     buildRow('', '/school to rank up'),                   // empty / tip text
     buildRow(SONDER_LOGO[0], '─'.repeat(rightPanelWidth - 2)), // logo line 1 / divider
     buildRow(SONDER_LOGO[1], 'Recent activity'),         // logo line 2 / activity header
-    buildRow(SONDER_LOGO[2], 'No recent sessions'),      // logo line 3 / activity text
-    buildRow('', ''),                                    // spacer
-    buildRow(' ' + displayTier, ''),                       // tier info
+    buildRow(SONDER_LOGO[2], activityRows[0] || ''),     // logo line 3 / activity row 1
+    buildRow('', activityRows[1] || ''),                 // activity row 2
+    buildRow(' ' + displayTier, activityRows[2] || ''),  // tier info / activity row 3
     buildRow(machineInfo, ''),                           // machine info
     buildRow('', ''),                                    // bottom padding
   ]

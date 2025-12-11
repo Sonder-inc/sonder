@@ -1,4 +1,4 @@
-export const MODELS = ['sonder', 'claude', 'gemini', 'codex', 'aider', 'warp'] as const
+export const MODELS = ['sonder', 'claude', 'codex', 'gemini'] as const
 export type ModelName = (typeof MODELS)[number]
 
 // Base model IDs (without thinking suffix)
@@ -6,10 +6,8 @@ export type ModelName = (typeof MODELS)[number]
 export const MODEL_IDS: Record<ModelName, string> = {
   sonder: 'deepseek/deepseek-v3.2', // Standard V3.2 with full tool support
   claude: 'anthropic/claude-3.7-sonnet',
-  gemini: 'google/gemini-2.0-flash-001',
   codex: 'openai/gpt-4o',
-  aider: 'openai/gpt-4o-mini',
-  warp: 'openai/gpt-4-turbo',
+  gemini: 'google/gemini-2.0-flash-001',
 }
 
 // Models that support thinking mode

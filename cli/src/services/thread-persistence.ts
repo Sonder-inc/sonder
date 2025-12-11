@@ -119,3 +119,9 @@ export function getTimeAgo(isoDate: string): string {
   if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
   return `${Math.floor(diffMins / 1440)}d ago`
 }
+
+export function getRecentThreads(threads: Thread[], limit: number = 3): Thread[] {
+  return [...threads]
+    .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime())
+    .slice(0, limit)
+}

@@ -187,7 +187,7 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
             {tab}{idx < TABS.length - 1 ? ' ' : ''}
           </text>
         ))}
-        <text style={{ fg: theme.muted }}> (tab to cycle)</text>
+        <text style={{ fg: theme.muted }}> (tab to cycle)(esc to close)</text>
       </box>
     )
   }
@@ -206,7 +206,6 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
             <text style={{ fg: theme.accent }}>{inputValue ? '*'.repeat(inputValue.length) : '(type key)'}</text>
             <text style={{ fg: theme.accent }}>_</text>
           </box>
-          <text style={{ fg: theme.muted, marginTop: 2 }}>Enter to save, Esc to cancel</text>
         </box>
       )
     }
@@ -234,7 +233,6 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
               )
             })}
           </box>
-          <text style={{ fg: theme.muted, marginTop: 2 }}>Enter to edit, Esc to go back</text>
         </box>
       )
     }
@@ -255,7 +253,6 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
               )
             })}
           </box>
-          <text style={{ fg: theme.muted, marginTop: 2 }}>Enter to select, Esc to go back</text>
         </box>
       )
     }
@@ -276,7 +273,6 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
               )
             })}
           </box>
-          <text style={{ fg: theme.muted, marginTop: 2 }}>Enter to select, Esc to go back</text>
         </box>
       )
     }
@@ -298,7 +294,6 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
             )
           })}
         </box>
-        <text style={{ fg: theme.muted, marginTop: 2 }}>Enter to select, Esc to close</text>
       </box>
     )
   }
@@ -328,59 +323,44 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
             </text>
           </box>
         </box>
-        <text style={{ fg: theme.muted, marginTop: 2 }}>Press Esc to close</text>
       </box>
     )
   }
 
   // Render Usage tab content
   const renderUsageTab = () => {
-    // Helper function to render progress bar using unicode blocks
-    const renderProgressBar = (percentage: number, barWidth: number = 50) => {
+    // Helper function to render progress bar with label superimposed
+    const renderProgressBar = (percentage: number, label: string, barWidth: number = 50) => {
       const filledWidth = Math.floor((percentage / 100) * barWidth)
-      const emptyWidth = barWidth - filledWidth
       const filledColor = percentage < 40 ? '#818cf8' : percentage < 70 ? '#fbbf24' : '#f87171'
       const emptyColor = '#52525b'
 
-      const filledBar = '\u2588'.repeat(filledWidth)
-      const emptyBar = '\u2588'.repeat(emptyWidth)
+      // Pad label to fill bar width, truncate if too long
+      const paddedLabel = label.padEnd(barWidth).slice(0, barWidth)
+      const filledPart = paddedLabel.slice(0, filledWidth)
+      const emptyPart = paddedLabel.slice(filledWidth)
 
       return (
         <box style={{ flexDirection: 'row' }}>
-          <text style={{ fg: filledColor }}>{filledBar}</text>
-          <text style={{ fg: emptyColor }}>{emptyBar}</text>
+          <text style={{ bg: filledColor, fg: '#fff' }}>{filledPart}</text>
+          <text style={{ bg: emptyColor, fg: '#fff' }}>{emptyPart}</text>
+          <text style={{ fg: theme.foreground }}> {percentage}%</text>
         </box>
       )
     }
 
     return (
       <box style={{ flexDirection: 'column' }}>
-        {/* Current session */}
-        <text style={{ fg: theme.foreground }}>Current session</text>
-        <box style={{ flexDirection: 'row' }}>
-          {renderProgressBar(30)}
-          <text style={{ fg: theme.foreground }}> 30% used</text>
-        </box>
+        {renderProgressBar(30, 'Current session')}
         <text style={{ fg: theme.muted }}>Resets 9:59pm (America/Toronto)</text>
 
-        {/* Current week (all models) */}
-        <text style={{ fg: theme.foreground, marginTop: 1 }}>Current week (all models)</text>
-        <box style={{ flexDirection: 'row' }}>
-          {renderProgressBar(66)}
-          <text style={{ fg: theme.foreground }}> 66% used</text>
-        </box>
+        <box style={{ marginTop: 1 }}>{renderProgressBar(66, 'Current week (all models)')}</box>
         <text style={{ fg: theme.muted }}>Resets Dec 15 at 2:59pm (America/Toronto)</text>
 
-        {/* Current week (sonder only) */}
-        <text style={{ fg: theme.foreground, marginTop: 1 }}>Current week (sonder only)</text>
-        <box style={{ flexDirection: 'row' }}>
-          {renderProgressBar(14)}
-          <text style={{ fg: theme.foreground }}> 14% used</text>
-        </box>
+        <box style={{ marginTop: 1 }}>{renderProgressBar(14, 'Current week (sonder only)')}</box>
         <text style={{ fg: theme.muted }}>Resets Dec 15 at 3:59pm (America/Toronto)</text>
 
         <text style={{ fg: theme.muted, marginTop: 1 }}>Extra usage not enabled • /extra-usage to enable</text>
-        <text style={{ fg: theme.muted }}>Esc to cancel</text>
       </box>
     )
   }
@@ -449,14 +429,13 @@ export const SettingsPanel = ({ onClose, initialTab = 'Config', model, modelId, 
             <text style={{ fg: theme.muted, marginTop: 1 }}>Tools: {getToolNames().length} | Smart Tools: {getSmartToolNames().length}</text>
           </box>
         </box>
-        <text style={{ fg: theme.muted, marginTop: 1 }}>Press Esc to close</text>
       </box>
     )
   }
 
   // Main render
   return (
-    <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
+    <box style={{ flexDirection: 'column', marginLeft: 1 }}>
       {renderTabHeader()}
       {currentTab === 'Config' && renderConfigTab()}
       {currentTab === 'Status' && renderStatusTab()}

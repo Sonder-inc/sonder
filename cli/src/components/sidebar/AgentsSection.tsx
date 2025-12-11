@@ -52,11 +52,11 @@ export const AgentsSection = ({ isActive, width }: AgentsSectionProps) => {
   }, [toolCalls, smartToolNames])
 
   // Calculate dynamic height (min 4, max based on agent count)
-  const contentHeight = Math.max(1, Math.min(agentCounts.length, 8))
+  const contentHeight = Math.max(1, Math.min(agentCounts.length, 12))
   const sectionHeight = contentHeight + 2 // +2 for borders
 
   return (
-    <SidebarSection number={1} title="Agents" isActive={isActive} width={width} height={sectionHeight}>
+    <SidebarSection number={1} title="Agents" isActive={isActive} width={width} height={sectionHeight} flexGrow={1}>
       {agentCounts.length === 0 ? (
         <SidebarRow width={width} isActive={isActive}>
           <text fg={theme.muted}>no active agents</text>

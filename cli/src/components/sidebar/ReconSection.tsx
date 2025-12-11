@@ -39,7 +39,7 @@ export const ReconSection = ({ isActive, width }: ReconSectionProps) => {
       title="Recon"
       isActive={isActive}
       width={width}
-      flexGrow={1}
+      height={4}
     >
       {findings.length === 0 ? (
         <SidebarRow width={width} isActive={isActive}>

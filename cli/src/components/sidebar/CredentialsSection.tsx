@@ -71,7 +71,7 @@ export const CredentialsSection = ({ isActive, width }: CredentialsSectionProps)
       title="Credentials"
       isActive={isActive}
       width={width}
-      flexGrow={1}
+      height={4}
     >
       {credentials.length === 0 ? (
         <SidebarRow width={width} isActive={isActive}>
