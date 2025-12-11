@@ -90,9 +90,13 @@ async function main(): Promise<void> {
       const success = performUpdate(updateInfo.latestVersion)
       if (success) {
         console.log('\x1b[32mupdated!\x1b[0m\n')
-        // Re-execute sonder with same args
-        const { spawn } = await import('child_process')
-        spawn(process.argv[0], process.argv.slice(1), {
+        // Re-execute sonder with same args using the installed binary path
+        const { spawnSync } = await import('child_process')
+        const { homedir } = await import('os')
+        const binPath = process.env.SONDER_BIN_DIR
+          ? `${process.env.SONDER_BIN_DIR}/sonder`
+          : `${homedir()}/.local/bin/sonder`
+        spawnSync(binPath, process.argv.slice(2), {
           stdio: 'inherit',
           env: process.env,
         })
