@@ -8,6 +8,7 @@ import type { ContextFocusPhase } from '../components/panels/ContextPanel'
 import { useWorktreeNavigation } from './use-worktree-navigation'
 import { useThreadStore } from '../state/thread-store'
 import { useSchoolStore } from '../state/school-store'
+import { useHackingStore } from '../state/hacking-store'
 import { platformManager } from '../services/platform'
 import { saveMessage } from '../services/message-persistence'
 import { copyToClipboard } from '../utils/clipboard'
@@ -38,17 +39,18 @@ interface UseAppKeyboardOptions {
   // Smart shortcut
   smartShortcut: string | null
   setSmartShortcut: (shortcut: string | null) => void
-  // Status panel
-  showStatusPanel?: boolean
-  setShowStatusPanel?: (show: boolean) => void
-  // Config panel
-  showConfigPanel?: boolean
-  setShowConfigPanel?: (show: boolean) => void
+  // Settings panel
+  showSettingsPanel?: boolean
+  setShowSettingsPanel?: (show: boolean) => void
+  setInitialSettingsTab?: (tab: 'Config' | 'Status' | 'Usage' | 'Context') => void
   // Message handling for compact summary
   addMessage?: (message: ChatMessage) => void
   clearMessages?: () => void
   // Messages for copy functionality
   messages?: ChatMessage[]
+  // School mode functions
+  enterSchoolMode: () => void
+  exitSchoolMode: () => void
 }
 
 export function useAppKeyboard({
@@ -67,13 +69,14 @@ export function useAppKeyboard({
   setThinkingEnabled,
   smartShortcut,
   setSmartShortcut,
-  showStatusPanel,
-  setShowStatusPanel,
-  showConfigPanel,
-  setShowConfigPanel,
+  showSettingsPanel,
+  setShowSettingsPanel,
+  setInitialSettingsTab,
   addMessage,
   clearMessages,
   messages,
+  enterSchoolMode,
+  exitSchoolMode,
 }: UseAppKeyboardOptions) {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCommands, setShowCommands] = useState(false)
@@ -101,15 +104,9 @@ export function useAppKeyboard({
   // Key intercept for input - handles Shift+M before input processes it
   const handleKeyIntercept = useCallback(
     (key: KeyEvent): boolean => {
-      // Let ConfigPanel handle its own keyboard events
-      if (showConfigPanel) {
-        return false // don't intercept, let ConfigPanel handle it
-      }
-
-      // Close status panel on any keypress
-      if (showStatusPanel && setShowStatusPanel) {
-        setShowStatusPanel(false)
-        return true // consume the key
+      // Let SettingsPanel handle its own keyboard events
+      if (showSettingsPanel) {
+        return false // don't intercept, let SettingsPanel handle it
       }
 
       // School mode keyboard handling
@@ -209,7 +206,7 @@ export function useAppKeyboard({
             return true
           }
           if (schoolStore.view === 'session') {
-            // Don't allow escape during session - use /stop command
+            // Don't allow escape during session
             return true
           }
           // In categories view, escape exits school mode
@@ -393,7 +390,13 @@ export function useAppKeyboard({
           // Handle local commands
           if (cmd === '/school') {
             // Toggle school mode (index 4) - if already in school, go back to stealth (0)
-            setModeIndex((prev) => prev === 4 ? 0 : 4)
+            if (modeIndex === SCHOOL_MODE_INDEX) {
+              exitSchoolMode()
+              setModeIndex(() => 0)
+            } else {
+              setModeIndex(() => SCHOOL_MODE_INDEX)
+              enterSchoolMode()
+            }
             return true
           }
           if (cmd === '/exit' || cmd === '/quit') {
@@ -410,16 +413,218 @@ export function useAppKeyboard({
             process.stdout.write('\x1b[2J\x1b[H')
             return true
           }
-          if (cmd === '/context' || cmd === '/status') {
-            if (setShowStatusPanel) setShowStatusPanel(true)
+          if (cmd === '/status') {
+            if (setInitialSettingsTab && setShowSettingsPanel) {
+              setInitialSettingsTab('Status')
+              setShowSettingsPanel(true)
+            }
+            return true
+          }
+          if (cmd === '/context') {
+            if (setInitialSettingsTab && setShowSettingsPanel) {
+              setInitialSettingsTab('Context')
+              setShowSettingsPanel(true)
+            }
+            return true
+          }
+          if (cmd === '/usage') {
+            if (setInitialSettingsTab && setShowSettingsPanel) {
+              setInitialSettingsTab('Usage')
+              setShowSettingsPanel(true)
+            }
             return true
           }
           if (cmd === '/config' || cmd === '/theme') {
-            if (setShowConfigPanel) setShowConfigPanel(true)
+            if (setInitialSettingsTab && setShowSettingsPanel) {
+              setInitialSettingsTab('Config')
+              setShowSettingsPanel(true)
+            }
             return true
           }
-          if (cmd === '/init' || cmd === '/doctor' ||
-              cmd === '/logout' || cmd === '/add-dir' || cmd === '/agents') {
+          if (cmd === '/init') {
+            // Initialize project directory
+            void (async () => {
+              try {
+                const { initProjectDirectory, getInitProjectSummary } = await import('../utils/init')
+                const result = await initProjectDirectory()
+                const summary = getInitProjectSummary(result)
+
+                if (addMessage) {
+                  addMessage({
+                    id: `sys-${Date.now()}`,
+                    variant: 'system',
+                    content: `Project initialized:\n${summary}`,
+                    timestamp: new Date(),
+                    isComplete: true,
+                  })
+                }
+              } catch (err) {
+                if (addMessage) {
+                  addMessage({
+                    id: `sys-${Date.now()}`,
+                    variant: 'error',
+                    content: `Failed to initialize project: ${err}`,
+                    timestamp: new Date(),
+                    isComplete: true,
+                  })
+                }
+              }
+            })()
+            return true
+          }
+          if (cmd === '/target') {
+            // Set current target for hacking session
+            const args = inputValue.slice(cmd.length).trim().split(/\s+/)
+            if (args.length === 0 || !args[0]) {
+              if (addMessage) {
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'system',
+                  content: 'Usage: /target <ip> [name]',
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              }
+              return true
+            }
+            const [ip, ...nameParts] = args
+            const name = nameParts.join(' ')
+            useHackingStore.getState().startSession(ip, name || undefined)
+            if (addMessage) {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `Target set: ${ip}${name ? ` (${name})` : ''}`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            }
+            return true
+          }
+          if (cmd === '/flag') {
+            // Mark flag as collected (user/root)
+            const args = inputValue.slice(cmd.length).trim().toLowerCase()
+            if (!args || (args !== 'user' && args !== 'root')) {
+              if (addMessage) {
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'system',
+                  content: 'Usage: /flag <user|root>',
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              }
+              return true
+            }
+            if (args === 'user') {
+              useHackingStore.getState().markUserFlag(true)
+            } else {
+              useHackingStore.getState().markRootFlag(true)
+            }
+            if (addMessage) {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `${args} flag marked as collected!`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            }
+            return true
+          }
+          if (cmd === '/recon') {
+            // Add recon finding: /recon <type> <value> [details]
+            const args = inputValue.slice(cmd.length).trim().split(/\s+/)
+            if (args.length < 2) {
+              if (addMessage) {
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'system',
+                  content: 'Usage: /recon <port|service|os|tech|subdomain|directory|vulnerability> <value> [details]',
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              }
+              return true
+            }
+            const [type, value, ...detailsParts] = args
+            const validTypes = ['port', 'service', 'os', 'tech', 'subdomain', 'directory', 'vulnerability']
+            if (!validTypes.includes(type)) {
+              if (addMessage) {
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'error',
+                  content: `Invalid type "${type}". Valid types: ${validTypes.join(', ')}`,
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              }
+              return true
+            }
+            const details = detailsParts.join(' ')
+            useHackingStore.getState().addFinding({
+              type: type as any,
+              value,
+              details: details || undefined,
+            })
+            if (addMessage) {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `Recon finding added: ${type} - ${value}${details ? ` (${details})` : ''}`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            }
+            return true
+          }
+          if (cmd === '/cred') {
+            // Add credential: /cred <type> <value> [user] [service]
+            const args = inputValue.slice(cmd.length).trim().split(/\s+/)
+            if (args.length < 2) {
+              if (addMessage) {
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'system',
+                  content: 'Usage: /cred <username|password|hash|api_key|token|ssh_key|certificate> <value> [user] [service]',
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              }
+              return true
+            }
+            const [type, value, user, service] = args
+            const validTypes = ['username', 'password', 'hash', 'api_key', 'token', 'ssh_key', 'certificate']
+            if (!validTypes.includes(type)) {
+              if (addMessage) {
+                addMessage({
+                  id: `sys-${Date.now()}`,
+                  variant: 'error',
+                  content: `Invalid type "${type}". Valid types: ${validTypes.join(', ')}`,
+                  timestamp: new Date(),
+                  isComplete: true,
+                })
+              }
+              return true
+            }
+            useHackingStore.getState().addCredential({
+              type: type as any,
+              value,
+              user: user || undefined,
+              service: service || undefined,
+            })
+            if (addMessage) {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `Credential added: ${type} - ${value}${user ? ` (${user})` : ''}`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            }
+            return true
+          }
+          if (cmd === '/doctor' || cmd === '/agents') {
             // TODO: Implement these commands
             return true
           }
@@ -492,15 +697,15 @@ export function useAppKeyboard({
       }
       return false // not handled, let input process it
     },
-    [showShortcuts, showCommands, showContext, showStatusPanel, setShowStatusPanel, showConfigPanel, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, modeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut, contextFocusPhase, worktreeNav, switchThread, forkThread, compactThread, deleteThread, addMessageToThread, addMessage, clearMessages, currentThreadId, worktreeAction],
+    [showShortcuts, showCommands, showContext, showSettingsPanel, setShowSettingsPanel, setInitialSettingsTab, inputValue, selectedMenuIndex, handleSendMessage, setInputValue, setModelIndex, setModeIndex, modeIndex, setThinkingEnabled, smartShortcut, setSmartShortcut, contextFocusPhase, worktreeNav, switchThread, forkThread, compactThread, deleteThread, addMessageToThread, addMessage, clearMessages, currentThreadId, worktreeAction],
   )
 
   // Global keyboard handler for Ctrl+C, Ctrl+O, Escape, and backspace
   useKeyboard(
     useCallback(
       (key: KeyEvent) => {
-        // Let ConfigPanel handle its own keyboard events
-        if (showConfigPanel) {
+        // Let SettingsPanel handle its own keyboard events
+        if (showSettingsPanel) {
           return
         }
 
@@ -582,7 +787,7 @@ export function useAppKeyboard({
           }
         }
       },
-      [inputValue, setInputValue, showShortcuts, showContext, pendingExit, isStreaming, cancelStream, toolCalls, toggleExpandedTool, showConfigPanel, messages, addMessage],
+      [inputValue, setInputValue, showShortcuts, showContext, pendingExit, isStreaming, cancelStream, toolCalls, toggleExpandedTool, showSettingsPanel, messages, addMessage],
     ),
   )
 

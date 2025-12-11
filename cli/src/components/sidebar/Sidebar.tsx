@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useKeyboard } from '@opentui/react'
 import type { KeyEvent } from '@opentui/core'
-import { PlayerStatsSection } from './PlayerStatsSection'
+import { AgentsSection } from './AgentsSection'
 import { TopicsSection } from './TopicsSection'
 import { MachinesSection } from './MachinesSection'
 import { MysterySection } from './MysterySection'
@@ -10,9 +10,11 @@ import { useSchoolStore } from '../../state/school-store'
 interface SidebarProps {
   width: number
   isSchoolMode?: boolean
+  showCommands?: boolean
+  showContext?: boolean
 }
 
-export const Sidebar = ({ width }: SidebarProps) => {
+export const Sidebar = ({ width, showCommands, showContext }: SidebarProps) => {
   const [activeSection, setActiveSection] = useState<number | null>(null) // null = unfocused
 
   const {
@@ -61,6 +63,11 @@ export const Sidebar = ({ width }: SidebarProps) => {
         } else if (key.name === 'down' || key.sequence === 'j') {
           navigateMachineDown()
         } else if (key.name === 'return') {
+          // Don't handle Enter if command/context panel is open
+          if (showCommands || showContext) {
+            return
+          }
+
           const machine = selectCurrent()
           if (machine) {
             // TODO: Actually spawn the machine via API
@@ -70,7 +77,7 @@ export const Sidebar = ({ width }: SidebarProps) => {
           togglePlatformFilter()
         }
       }
-    }, [activeSection, navigateTopicUp, navigateTopicDown, navigateMachineUp, navigateMachineDown, selectCurrent, startSession, togglePlatformFilter])
+    }, [activeSection, showCommands, showContext, navigateTopicUp, navigateTopicDown, navigateMachineUp, navigateMachineDown, selectCurrent, startSession, togglePlatformFilter])
   )
 
   return (
@@ -84,7 +91,7 @@ export const Sidebar = ({ width }: SidebarProps) => {
         flexGrow: 1,
       }}
     >
-      <PlayerStatsSection isActive={activeSection === 1} width={width} />
+      <AgentsSection isActive={activeSection === 1} width={width} />
       <TopicsSection isActive={activeSection === 2} width={width} />
       <MachinesSection isActive={activeSection === 3} width={width} />
       <MysterySection isActive={activeSection === 4} width={width} />

@@ -8,6 +8,7 @@ import { useSchoolMode } from './hooks/use-school-mode'
 import { useChatStore } from './state/chat-store'
 import { useThreadStore } from './state/thread-store'
 import { useSchoolStore } from './state/school-store'
+import { useHackingStore } from './state/hacking-store'
 import { useAuthStore } from './state/auth-store'
 import { platformManager } from './services/platform'
 import { InputBox, type MultilineInputHandle } from './components/input'
@@ -17,11 +18,11 @@ import { MessageList } from './components/chat/MessageList'
 import { ShortcutsPanel } from './components/panels/ShortcutsPanel'
 import { CommandPanel } from './components/panels/CommandPanel'
 import { ContextPanel } from './components/panels/ContextPanel'
-import { StatusPanel } from './components/panels/StatusPanel'
-import { ConfigPanel } from './components/panels/ConfigPanel'
+import { SettingsPanel, type SettingsTab } from './components/panels/SettingsPanel'
 import { SchoolModePanel } from './components/school'
 import { QuestionWizard } from './components/QuestionWizard'
 import { Sidebar } from './components/sidebar'
+import { HackingSidebar } from './components/sidebar/HackingSidebar'
 import { SystemInfo } from './components/SystemInfo'
 import { LoginPage } from './components/LoginPage'
 import { MODELS, MODES, getModelId } from './constants/app-constants'
@@ -53,11 +54,22 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
   const [modelIndex, setModelIndex] = useState(0)
   const [modeIndex, setModeIndex] = useState(0)
   const [thinkingEnabled, setThinkingEnabled] = useState(true)
-  const [showStatusPanel, setShowStatusPanel] = useState(false)
-  const [showConfigPanel, setShowConfigPanel] = useState(false)
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false)
+  const [initialSettingsTab, setInitialSettingsTab] = useState<SettingsTab>('Config')
 
-  // Auth logout
+  // Auth logout and config panel auto-open
   const logout = useAuthStore((state) => state.logout)
+  const shouldOpenConfig = useAuthStore((state) => state.shouldOpenConfig)
+  const clearShouldOpenConfig = useAuthStore((state) => state.clearShouldOpenConfig)
+
+  // Auto-open config panel for BYOK users (triggered once after login)
+  useEffect(() => {
+    if (shouldOpenConfig) {
+      setShowSettingsPanel(true)
+      setInitialSettingsTab('Config')
+      clearShouldOpenConfig()
+    }
+  }, [shouldOpenConfig, clearShouldOpenConfig])
 
   // Thread store - load on mount
   const loadThreads = useThreadStore((state) => state.loadThreads)
@@ -96,6 +108,9 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
 
   // School store for progress tracking
   const schoolStore = useSchoolStore()
+
+  // Hacking store for hacking mode
+  const hackingStore = useHackingStore()
 
   const {
     messages,
@@ -204,13 +219,14 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
     setThinkingEnabled,
     smartShortcut,
     setSmartShortcut,
-    showStatusPanel,
-    setShowStatusPanel,
-    showConfigPanel,
-    setShowConfigPanel,
+    showSettingsPanel,
+    setShowSettingsPanel,
+    setInitialSettingsTab,
     addMessage,
     clearMessages,
     messages,
+    enterSchoolMode,
+    exitSchoolMode,
   })
 
   // Index of 'school' in the MODES array
@@ -234,7 +250,6 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
 
       switch (command) {
         case '/school':
-        case '/hack':
           // Toggle school mode - if already in school, exit; otherwise enter
           if (modeIndex === SCHOOL_MODE_INDEX) {
             exitSchoolMode()
@@ -267,20 +282,59 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
           return
         }
 
-        case '/init':
-          // TODO: Initialize sonder in current directory
+        case '/init': {
+          // Initialize sonder in current directory
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+
+          // Import and call initProjectDirectory
+          void (async () => {
+            try {
+              const { initProjectDirectory, getInitProjectSummary } = await import('./utils/init')
+              const result = await initProjectDirectory()
+              const summary = getInitProjectSummary(result)
+
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'system',
+                content: `Project initialized:\n${summary}`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            } catch (err) {
+              addMessage({
+                id: `sys-${Date.now()}`,
+                variant: 'error',
+                content: `Failed to initialize project: ${err}`,
+                timestamp: new Date(),
+                isComplete: true,
+              })
+            }
+          })()
+          return
+        }
+
+        case '/status':
+          setInitialSettingsTab('Status')
+          setShowSettingsPanel(true)
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
 
-        case '/status':
         case '/context':
-          setShowStatusPanel(true)
+          setInitialSettingsTab('Context')
+          setShowSettingsPanel(true)
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+
+        case '/usage':
+          setInitialSettingsTab('Usage')
+          setShowSettingsPanel(true)
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
 
         case '/config':
         case '/theme':
-          setShowConfigPanel(true)
+          setInitialSettingsTab('Config')
+          setShowSettingsPanel(true)
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
 
@@ -382,110 +436,148 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
 
-        case '/flag': {
-          const flag = trimmed.slice(6).trim()
-          if (!flag) {
+        case '/target': {
+          // Set current target for hacking session
+          const args = trimmed.slice(command.length).trim().split(/\s+/)
+          if (args.length === 0 || !args[0]) {
             addMessage({
               id: `sys-${Date.now()}`,
               variant: 'system',
-              content: 'Usage: /flag <flag>',
+              content: 'Usage: /target <ip> [name]',
+              timestamp: new Date(),
+              isComplete: true,
+            })
+            setInputValue({ text: '/target ', cursorPosition: 8, lastEditDueToNav: false })
+            return
+          }
+          const [ip, ...nameParts] = args
+          const name = nameParts.join(' ')
+          hackingStore.startSession(ip, name || undefined)
+          addMessage({
+            id: `sys-${Date.now()}`,
+            variant: 'system',
+            content: `Target set: ${ip}${name ? ` (${name})` : ''}`,
+            timestamp: new Date(),
+            isComplete: true,
+          })
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+        }
+
+        case '/flag': {
+          // Mark flag as collected (user/root)
+          const args = trimmed.slice(command.length).trim().toLowerCase()
+          if (!args || (args !== 'user' && args !== 'root')) {
+            addMessage({
+              id: `sys-${Date.now()}`,
+              variant: 'system',
+              content: 'Usage: /flag <user|root>',
               timestamp: new Date(),
               isComplete: true,
             })
             setInputValue({ text: '/flag ', cursorPosition: 6, lastEditDueToNav: false })
             return
           }
-
-          // Submit flag
-          void (async () => {
-            const result = await submitFlag(flag)
-            addMessage({
-              id: `sys-${Date.now()}`,
-              variant: 'system',
-              content: result.correct
-                ? `Flag accepted! ${result.message}`
-                : `Incorrect flag: ${result.message}`,
-              timestamp: new Date(),
-              isComplete: true,
-            })
-
-            // Update school store progress
-            if (result.correct && schoolStore.activeBoxId) {
-              if (result.message.toLowerCase().includes('root')) {
-                schoolStore.markRootOwned(schoolStore.activeBoxId)
-              } else {
-                schoolStore.markUserOwned(schoolStore.activeBoxId)
-              }
-            }
-          })()
-          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-          return
-        }
-
-        case '/hint':
+          if (args === 'user') {
+            hackingStore.markUserFlag(true)
+          } else {
+            hackingStore.markRootFlag(true)
+          }
           addMessage({
             id: `sys-${Date.now()}`,
             variant: 'system',
-            content: 'Requesting hint... (hint system coming soon)',
+            content: `${args} flag marked as collected!`,
             timestamp: new Date(),
             isComplete: true,
           })
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
+        }
 
-        case '/stop': {
-          const machineId = schoolStore.activeBoxId
-          if (!machineId) {
+        case '/recon': {
+          // Add recon finding: /recon <type> <value> [details]
+          const args = trimmed.slice(command.length).trim().split(/\s+/)
+          if (args.length < 2) {
             addMessage({
               id: `sys-${Date.now()}`,
               variant: 'system',
-              content: 'No active machine to stop',
+              content: 'Usage: /recon <port|service|os|tech|subdomain|directory|vulnerability> <value> [details]',
               timestamp: new Date(),
               isComplete: true,
             })
-            setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+            setInputValue({ text: '/recon ', cursorPosition: 7, lastEditDueToNav: false })
             return
           }
-
-          void (async () => {
+          const [type, value, ...detailsParts] = args
+          const validTypes = ['port', 'service', 'os', 'tech', 'subdomain', 'directory', 'vulnerability']
+          if (!validTypes.includes(type)) {
             addMessage({
               id: `sys-${Date.now()}`,
-              variant: 'system',
-              content: 'Stopping machine...',
+              variant: 'error',
+              content: `Invalid type "${type}". Valid types: ${validTypes.join(', ')}`,
               timestamp: new Date(),
               isComplete: true,
             })
+            setInputValue({ text: trimmed, cursorPosition: trimmed.length, lastEditDueToNav: false })
+            return
+          }
+          const details = detailsParts.join(' ')
+          hackingStore.addFinding({
+            type: type as any,
+            value,
+            details: details || undefined,
+          })
+          addMessage({
+            id: `sys-${Date.now()}`,
+            variant: 'system',
+            content: `Recon finding added: ${type} - ${value}${details ? ` (${details})` : ''}`,
+            timestamp: new Date(),
+            isComplete: true,
+          })
+          setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+          return
+        }
 
-            try {
-              const result = await platformManager.stopMachine(machineId)
-              if (result.success) {
-                schoolStore.endSession()
-                addMessage({
-                  id: `sys-${Date.now()}`,
-                  variant: 'system',
-                  content: 'Machine stopped',
-                  timestamp: new Date(),
-                  isComplete: true,
-                })
-              } else {
-                addMessage({
-                  id: `sys-${Date.now()}`,
-                  variant: 'system',
-                  content: `Failed to stop machine: ${result.error}`,
-                  timestamp: new Date(),
-                  isComplete: true,
-                })
-              }
-            } catch (err) {
-              addMessage({
-                id: `sys-${Date.now()}`,
-                variant: 'system',
-                content: `Failed to stop machine: ${err}`,
-                timestamp: new Date(),
-                isComplete: true,
-              })
-            }
-          })()
+        case '/cred': {
+          // Add credential: /cred <type> <value> [user] [service]
+          const args = trimmed.slice(command.length).trim().split(/\s+/)
+          if (args.length < 2) {
+            addMessage({
+              id: `sys-${Date.now()}`,
+              variant: 'system',
+              content: 'Usage: /cred <username|password|hash|api_key|token|ssh_key|certificate> <value> [user] [service]',
+              timestamp: new Date(),
+              isComplete: true,
+            })
+            setInputValue({ text: '/cred ', cursorPosition: 6, lastEditDueToNav: false })
+            return
+          }
+          const [type, value, user, service] = args
+          const validTypes = ['username', 'password', 'hash', 'api_key', 'token', 'ssh_key', 'certificate']
+          if (!validTypes.includes(type)) {
+            addMessage({
+              id: `sys-${Date.now()}`,
+              variant: 'error',
+              content: `Invalid type "${type}". Valid types: ${validTypes.join(', ')}`,
+              timestamp: new Date(),
+              isComplete: true,
+            })
+            setInputValue({ text: trimmed, cursorPosition: trimmed.length, lastEditDueToNav: false })
+            return
+          }
+          hackingStore.addCredential({
+            type: type as any,
+            value,
+            user: user || undefined,
+            service: service || undefined,
+          })
+          addMessage({
+            id: `sys-${Date.now()}`,
+            variant: 'system',
+            content: `Credential added: ${type} - ${value}${user ? ` (${user})` : ''}`,
+            timestamp: new Date(),
+            isComplete: true,
+          })
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
           return
         }
@@ -496,7 +588,6 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
           return
 
         case '/doctor':
-        case '/add-dir':
         case '/agents':
           // TODO: Implement these commands
           setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
@@ -506,7 +597,7 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
 
     handleSendMessage(trimmed)
     setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
-  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowStatusPanel, setShowConfigPanel, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode, setQuestionWizard, submitFlag, isSchoolActive, schoolStore, logout])
+  }, [inputValue, isStreaming, handleSendMessage, setInputValue, setModeIndex, setShowSettingsPanel, setInitialSettingsTab, addMessage, version, modeIndex, enterSchoolMode, exitSchoolMode, setQuestionWizard, submitFlag, isSchoolActive, schoolStore, hackingStore, logout])
 
   useEffect(() => {
     if (initialPrompt && messages.length === 0) {
@@ -613,17 +704,16 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
               worktreeAction={worktreeAction}
             />
           )}
-          {showStatusPanel && (
-            <StatusPanel
+          {showSettingsPanel && (
+            <SettingsPanel
               model={MODELS[modelIndex]}
               modelId={getModelId(MODELS[modelIndex], thinkingEnabled)}
               mode={MODES[modeIndex]}
               version={version}
               thinkingEnabled={thinkingEnabled}
+              initialTab={initialSettingsTab}
+              onClose={() => setShowSettingsPanel(false)}
             />
-          )}
-          {showConfigPanel && (
-            <ConfigPanel onClose={() => setShowConfigPanel(false)} />
           )}
 
           {/* School mode panel - shows during setup phases or active session */}
@@ -656,7 +746,11 @@ const AuthenticatedApp = ({ initialPrompt, version, launchDir }: AppProps) => {
       </box>
 
       {/* Sidebar - full height */}
-      <Sidebar width={sidebarWidth} isSchoolMode={modeIndex === SCHOOL_MODE_INDEX} />
+      {modeIndex === SCHOOL_MODE_INDEX ? (
+        <Sidebar width={sidebarWidth} isSchoolMode={true} showCommands={showCommands} showContext={showContext} />
+      ) : (
+        <HackingSidebar width={sidebarWidth} showCommands={showCommands} showContext={showContext} />
+      )}
     </box>
   )
 }

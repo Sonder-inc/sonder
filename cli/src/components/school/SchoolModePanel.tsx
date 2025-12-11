@@ -43,61 +43,6 @@ export const SchoolModePanel = ({
     }
   }, [state.phase, state.platform])
 
-  // ─── Auth Prompt ─────────────────────────────────────────────────────────────
-
-  if (state.phase === 'auth_prompt') {
-    return (
-      <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
-        <text style={{ fg: theme.accent }}>Choose a platform to connect</text>
-        <text style={{ fg: theme.muted, marginTop: 1 }}>
-          sonder will open your browser to authenticate
-        </text>
-
-        <box style={{ flexDirection: 'row', marginTop: 1, gap: 2 }}>
-          <box
-            style={{
-              borderStyle: 'single',
-              borderColor: theme.accent,
-              paddingLeft: 2,
-              paddingRight: 2,
-            }}
-          >
-            <text style={{ fg: theme.foreground }}>[H] HackTheBox</text>
-          </box>
-          <box
-            style={{
-              borderStyle: 'single',
-              borderColor: '#22c55e',
-              paddingLeft: 2,
-              paddingRight: 2,
-            }}
-          >
-            <text style={{ fg: theme.foreground }}>[T] TryHackMe</text>
-          </box>
-        </box>
-
-        <text style={{ fg: theme.muted, marginTop: 1 }}>
-          Press H or T to select, ESC to cancel
-        </text>
-      </box>
-    )
-  }
-
-  // ─── Authenticating ──────────────────────────────────────────────────────────
-
-  if (state.phase === 'authenticating') {
-    return (
-      <box style={{ flexDirection: 'column', marginLeft: 1, marginTop: 1 }}>
-        <text style={{ fg: theme.accent }}>
-          Authenticating with {state.platform?.toUpperCase()}...
-        </text>
-        <text style={{ fg: theme.muted, marginTop: 1 }}>
-          Complete the login in your browser
-        </text>
-      </box>
-    )
-  }
-
   // ─── VPN Connecting ──────────────────────────────────────────────────────────
 
   if (state.phase === 'vpn_connecting') {
